@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Financial Dashboard</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 12px;
+    background: #f9f9f9;
+    font-size: 12px;
+}
+
+h1 { font-size: 18px; }
+h2 { font-size: 14px; margin-top: 25px; }
+
+form {
+    margin-bottom: 20px;
+    padding: 8px;
+    background: #fff;
+    border: 1px solid #ccc;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 4px 6px;
+    text-align: right;
+}
+
+th {
+    background: #eee;
+    text-align: center;
+}
+
+td:first-child {
+    text-align: left;
+}
+
+a { text-decoration: none; color: #007bff; }
+a:hover { text-decoration: underline; }
+
+.recon-ok { background-color: #f4fff6; }
+.recon-bad { background-color: #ffecec; font-weight: bold; }
+</style>
+</head>
+
+<body>
+
+<h1>Financial Dashboard</h1>
+
+<form method="get">
+    <label>Start Date:</label>
+    <input type="date" name="start_date" value="{{ request.args.get('start_date','') }}">
+
+    <label>End Date:</label>
+    <input type="date" name="end_date" value="{{ request.args.get('end_date','') }}">
+
+    <button type="submit">Filter</button>
+</form>
+
+{% if daily_reconciliation %}
+<h2>Daily Reconciliation</h2>
+
+<table>
+<tr>
+    <th>Date</th>
+    <th>Sales</th>
+    <th>Bank Credits</th>
+    <th>Difference</th>
+    <th>Accumulated Difference</th>
+</tr>
+
+{% for row in daily_reconciliation %}
+<tr class="{{ 'recon-bad' if row.accumulated_difference != 0 else 'recon-ok' }}">
+    <td>{{ row.day.strftime('%Y-%m-%d %a') }}</td>
+    <td>{{ "%.2f"|format(row.sales) }}</td>
+
+    <td>
+        <a href="{{ url_for(
+            'bank_credit_detail',
+            date=row.day.strftime('%Y-%m-%d'),
+            start_date=request.args.get('start_date'),
+            end_date=request.args.get('end_date')
+        ) }}">
+            {{ "%.2f"|format(row.credits) }}
+        </a>
+
+    </td>
+
+    <td>{{ "%.2f"|format(row.difference) }}</td>
+    <td>{{ "%.2f"|format(row.accumulated_difference) }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+
+</body>
+</html>

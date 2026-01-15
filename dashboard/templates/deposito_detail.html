@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>DEPOSITO {{ deposito_date.strftime('%Y-%m-%d') }}</title>
+
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; }
+table { width: 100%; border-collapse: collapse; background: #fff; margin-top: 20px; }
+th, td { border: 1px solid #ccc; padding: 6px; }
+th { background: #eee; }
+.total { font-weight: bold; background: #f0f0f0; }
+.deposito-amount { font-weight: bold; color: white; background-color: #28a745; text-align: center; border-radius: 4px; }
+a { text-decoration: none; color: #007bff; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+
+<body>
+
+<h1>DEPOSITO {{ deposito_date.strftime('%Y-%m-%d %a') }}</h1>
+
+<p>
+Covers sales from
+<strong>
+{% if prev_day %}
+    {{ prev_day.strftime('%Y-%m-%d %a') }}
+{% else %}
+    period start
+{% endif %}
+</strong>
+to
+<strong>{{ deposito_date.strftime('%Y-%m-%d %a') }}</strong>
+</p>
+
+<table>
+<tr>
+    <th>Date</th>
+    <th>Amount</th>
+    <th>Payment</th>
+    <th>Description</th>
+    <th>Source</th>
+</tr>
+
+{% set total_sales = 0 %}
+{% for row in sales_rows %}
+<tr>
+    <td>{{ row.sale_date.strftime('%Y-%m-%d %a') }}</td>
+    <td>{{ "%.2f"|format(row.amount) }}</td>
+    <td>{{ row.payment_type }}</td>
+    <td>{{ row.description }}</td>
+    <td>{{ row.source_file }}</td>
+</tr>
+{% set total_sales = total_sales + row.amount %}
+{% endfor %}
+
+<tr class="total">
+    <td>Total Sales</td>
+    <td>{{ "%.2f"|format(total_sales) }}</td>
+    <td colspan="3"></td>
+</tr>
+
+<tr class="total">
+    <td>DEPOSITO</td>
+    <td class="deposito-amount">{{ "%.2f"|format(deposito_amount or 0) }}</td>
+    <td colspan="3"></td>
+</tr>
+</table>
+
+<p>
+<a href="{{ url_for('dashboard') }}">⬅ Back to dashboard</a>
+</p>
+
+</body>
+</html>

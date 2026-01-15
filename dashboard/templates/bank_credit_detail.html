@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bank Credits {{ credit_date.strftime('%Y-%m-%d') }}</title>
+
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; font-size: 12px; }
+table { width: 100%; border-collapse: collapse; background: #fff; margin-top: 20px; }
+th, td { border: 1px solid #ccc; padding: 5px; text-align: right; }
+th { background: #eee; text-align: center; }
+td:first-child { text-align: left; }
+.total { font-weight: bold; background: #f0f0f0; }
+a { text-decoration: none; color: #007bff; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+
+<body>
+
+<h1>Bank Credits up to {{ credit_date.strftime('%Y-%m-%d %a') }}</h1>
+
+<p>
+Credits from
+<strong>
+{% if from_date %}
+    {{ from_date.strftime('%Y-%m-%d %a') }}
+{% else %}
+    period start
+{% endif %}
+</strong>
+to
+<strong>{{ credit_date.strftime('%Y-%m-%d %a') }}</strong>
+</p>
+
+<table>
+<tr>
+    <th>Date</th>
+    <th>Amount</th>
+    <th>Description</th>
+    <th>Source</th>
+</tr>
+
+{% set total = 0 %}
+{% for row in bank_rows %}
+<tr>
+    <td>{{ row.transaction_date.strftime('%Y-%m-%d %a') }}</td>
+    <td>{{ "%.2f"|format(row.amount) }}</td>
+    <td>{{ row.description }}</td>
+    <td>{{ row.source_file }}</td>
+</tr>
+{% set total = total + row.amount %}
+{% endfor %}
+<p>
+<strong>DEPOSITO applied up to this date:</strong>
+{{ "%.2f"|format(deposito_amount) }}
+</p>
+
+<tr class="total">
+    <td>Total Credits</td>
+    <td>{{ "%.2f"|format(total_credits) }}</td>
+    <td colspan="2"></td>
+</tr>
+
+</table>
+
+<p>
+
+<a href="{{ url_for('dashboard', start_date=start_filter, end_date=end_filter) }}">
+⬅ Back to dashboard
+</a>
+
+</p>
+
+</body>
+</html>
