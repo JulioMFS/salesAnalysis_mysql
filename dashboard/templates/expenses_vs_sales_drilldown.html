@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Expense Breakdown — {{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { font-size: 0.8rem; }
+        .row-line { border-bottom: 1px solid #eee; cursor: pointer; }
+        .category { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .muted { color: #6c757d; }
+        .btn-group .btn { font-size: 0.75rem; }
+    </style>
+</head>
+<body class="container mt-3">
+
+<a href="javascript:history.back()" class="btn btn-sm btn-secondary mb-2">← Back</a>
+
+<h6 class="mb-3">Expenses by Category — {{ title }}</h6>
+
+<div class="d-flex justify-content-end mb-2">
+    <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary active" onclick="showAmount()">Amount</button>
+        <button class="btn btn-outline-secondary" onclick="showPercent()">%</button>
+    </div>
+</div>
+
+<div class="row fw-bold row-line pb-1 mb-1">
+    <div class="col-5">Category</div>
+    <div class="col-2 text-end">Tx</div>
+    <div class="col-3 text-end amount-col">Amount</div>
+    <div class="col-2 text-end percent-col d-none">%</div>
+</div>
+
+{% for c in categories %}
+<div class="row row-line py-1" onclick="showTransactions('{{ c.category }}')">
+    <div class="col-5 category">{{ c.category }}</div>
+    <div class="col-2 text-end muted">{{ c.tx_count }}</div>
+    <div class="col-3 text-end amount-col">{{ "{:,.2f}".format(c.total_amount) }}</div>
+    <div class="col-2 text-end percent-col d-none">{{ "%.1f"|format(c.percent) }}%</div>
+</div>
+{% endfor %}
+
+<div class="row fw-bold pt-2 row-line">
+    <div class="col-5">Total</div>
+    <div class="col-2 text-end muted">{{ total_tx }}</div>
+    <div class="col-3 text-end amount-col">{{ "{:,.2f}".format(total_amount) }}</div>
+    <div class="col-2 text-end percent-col d-none">100%</div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="transactionsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title" id="modalTitle">Transactions</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <table class="table table-sm table-striped">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th class="text-end">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="modalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const transactions = {{ transactions_json|safe }};
+
+function showAmount() {
+    document.querySelectorAll('.amount-col').forEach(e => e.classList.remove('d-none'));
+    document.querySelectorAll('.percent-col').forEach(e => e.classList.add('d-none'));
+    setActive(0);
+}
+
+function showPercent() {
+    document.querySelectorAll('.amount-col').forEach(e => e.classList.add('d-none'));
+    document.querySelectorAll('.percent-col').forEach(e => e.classList.remove('d-none'));
+    setActive(1);
+}
+
+function setActive(idx) {
+    const buttons = document.querySelectorAll('.btn-group .btn');
+    buttons.forEach((b,i) => b.classList.toggle('active', i===idx));
+}
+
+function showTransactions(category) {
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+
+    modalTitle.innerText = `Transactions — ${category}`;
+    modalBody.innerHTML = '';
+
+    const catTx = transactions.filter(t => t.category === category);
+    catTx.forEach(t => {
+        const row = `<tr>
+            <td>${t.date}</td>
+            <td>${t.description}</td>
+            <td class="text-end">${t.amount.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+        </tr>`;
+        modalBody.innerHTML += row;
+    });
+
+    const modal = new bootstrap.Modal(document.getElementById('transactionsModal'));
+    modal.show();
+}
+</script>
+</body>
+</html>

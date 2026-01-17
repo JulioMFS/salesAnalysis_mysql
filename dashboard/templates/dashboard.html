@@ -1,105 +1,84 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Financial Dashboard</title>
-
-<style>
-body {
-    font-family: Arial, sans-serif;
-    margin: 12px;
-    background: #f9f9f9;
-    font-size: 12px;
-}
-
-h1 { font-size: 18px; }
-h2 { font-size: 14px; margin-top: 25px; }
-
-form {
-    margin-bottom: 20px;
-    padding: 8px;
-    background: #fff;
-    border: 1px solid #ccc;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: #fff;
-}
-
-th, td {
-    border: 1px solid #ccc;
-    padding: 4px 6px;
-    text-align: right;
-}
-
-th {
-    background: #eee;
-    text-align: center;
-}
-
-td:first-child {
-    text-align: left;
-}
-
-a { text-decoration: none; color: #007bff; }
-a:hover { text-decoration: underline; }
-
-.recon-ok { background-color: #f4fff6; }
-.recon-bad { background-color: #ffecec; font-weight: bold; }
-</style>
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-
 <body>
 
-<h1>Financial Dashboard</h1>
+<div class="container mt-5">
+    <h1 class="mb-4">Dashboard</h1>
 
-<form method="get">
-    <label>Start Date:</label>
-    <input type="date" name="start_date" value="{{ request.args.get('start_date','') }}">
+    <!-- Action Buttons -->
+    <div class="row g-3 mb-4">
 
-    <label>End Date:</label>
-    <input type="date" name="end_date" value="{{ request.args.get('end_date','') }}">
+        <div class="col-md-4">
+            <form method="POST">
+                <button type="submit" name="action" value="upload_bank"
+                        class="btn btn-primary w-100 py-3"
+                        title="Imports bank statements from import_csv.py">
+                    Upload Bank Statements
+                </button>
+            </form>
+        </div>
 
-    <button type="submit">Filter</button>
-</form>
+        <div class="col-md-4">
+            <form method="POST">
+                <button type="submit" name="action" value="upload_sales"
+                        class="btn btn-success w-100 py-3"
+                        title="Imports sales data from import_excel.py">
+                    Upload Sales
+                </button>
+            </form>
+        </div>
 
-{% if daily_reconciliation %}
-<h2>Daily Reconciliation</h2>
+        <div class="col-md-4">
+            <form method="POST">
+                <button type="submit" name="action" value="daily_recon"
+                        class="btn btn-warning w-100 py-3"
+                        title="Runs daily reconciliation using reconciliation.py">
+                    Run Daily Reconciliation
+                </button>
+            </form>
+        </div>
 
-<table>
-<tr>
-    <th>Date</th>
-    <th>Sales</th>
-    <th>Bank Credits</th>
-    <th>Difference</th>
-    <th>Accumulated Difference</th>
-</tr>
+    </div>
 
-{% for row in daily_reconciliation %}
-<tr class="{{ 'recon-bad' if row.accumulated_difference != 0 else 'recon-ok' }}">
-    <td>{{ row.day.strftime('%Y-%m-%d %a') }}</td>
-    <td>{{ "%.2f"|format(row.sales) }}</td>
+    <!-- Navigation Buttons -->
+    <div class="row g-3 mb-4">
 
-    <td>
-        <a href="{{ url_for(
-            'bank_credit_detail',
-            date=row.day.strftime('%Y-%m-%d'),
-            start_date=request.args.get('start_date'),
-            end_date=request.args.get('end_date')
-        ) }}">
-            {{ "%.2f"|format(row.credits) }}
-        </a>
+        <div class="col-md-6">
+            <a href="{{ url_for('expenses_vs_sales') }}"
+               class="btn btn-info w-100 py-3">
+                View Expenses vs Sales Charts
+            </a>
+        </div>
 
-    </td>
+        <div class="col-md-6">
+            <a href="{{ url_for('sales_vs_deposits') }}"
+               class="btn btn-warning w-100 py-3">
+                Sales vs Bank Deposits
+            </a>
+        </div>
 
-    <td>{{ "%.2f"|format(row.difference) }}</td>
-    <td>{{ "%.2f"|format(row.accumulated_difference) }}</td>
-</tr>
-{% endfor %}
-</table>
-{% endif %}
+    </div>
 
+    <!-- Flash messages -->
+    <div class="mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, msg in messages %}
+                    <div class="alert alert-{{ 'success' if category=='success' else 'danger' }}" role="alert">
+                        {{ msg }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

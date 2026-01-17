@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Expenses vs Sales</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body { font-size: 0.8rem; }
+        .row-line { border-bottom: 1px solid #eee; cursor: pointer; }
+        .category { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .muted { color: #6c757d; }
+        .row-header { font-weight: 600; }
+        .col-percent { cursor: pointer; }
+    </style>
+</head>
+<body class="container mt-3">
+
+<a href="javascript:history.back()" class="btn btn-sm btn-secondary mb-2">← Back</a>
+
+<div class="top-bar mb-2">
+  <form method="POST" action="{{ url_for('expenses_vs_sales') }}" class="top-bar-form d-flex gap-2 flex-wrap align-items-center">
+    <div class="field-group">
+      <label for="start_date">Start Date:</label>
+      <input type="date" id="start_date" name="start_date" value="{{ start_date }}" required>
+    </div>
+    <div class="field-group">
+      <label for="end_date">End Date:</label>
+      <input type="date" id="end_date" name="end_date" value="{{ end_date }}" required>
+    </div>
+    <div class="field-group">
+      <label for="view">View:</label>
+      <select name="view" id="view">
+        <option value="monthly" {% if view=='monthly' %}selected{% endif %}>Monthly</option>
+        <option value="weekly" {% if view=='weekly' %}selected{% endif %}>Weekly</option>
+        <option value="daily" {% if view=='daily' %}selected{% endif %}>Daily</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary mt-2">Apply</button>
+  </form>
+</div>
+
+<h6>Expenses vs Sales — {{ view.title() }}</h6>
+
+<div id="expenses-chart" style="width:100%; height:400px;"></div>
+
+<!-- Header -->
+<div class="row fw-bold row-line row-header pb-1 mb-1">
+    <div class="col-5">Category</div>
+    <div class="col-2 text-end">Tx</div>
+    <div class="col-3 text-end">Amount</div>
+    <div class="col-2 text-end col-percent" id="percentHeader" title="Click to sort by percentage">%</div>
+</div>
+
+<!-- Category rows -->
+<div id="category-rows">
+{% for c in categories %}
+<div class="row row-line py-1 category-row"
+     data-category="{{ c.category }}"
+     data-percent="{{ c.percent }}">
+    <div class="col-5 category">{{ c.category }}</div>
+    <div class="col-2 text-end muted">{{ c.tx_count }}</div>
+    <div class="col-3 text-end">{{ "{:,.2f}".format(c.total_amount) }}</div>
+    <div class="col-2 text-end">
+        <div class="d-flex align-items-center gap-2">
+            <div class="progress flex-grow-1" style="height:6px;">
+                <div class="progress-bar" title="{{ '{:,.2f}'.format(c.total_amount) }} ({{ '%.1f'|format(c.percent) }}%)"
+                     style="width: {{ c.percent }}%;
+                            background-color:
+                            {% if c.percent >= 50 %}#dc3545
+                            {% elif c.percent >= 25 %}#fd7e14
+                            {% else %}#198754
+                            {% endif %};"></div>
+            </div>
+            <small class="text-muted">{{ '%.1f'|format(c.percent) }}%</small>
+        </div>
+    </div>
+</div>
+{% endfor %}
+</div>
+
+<!-- Footer -->
+<div class="row fw-bold pt-2 row-line row-footer">
+    <div class="col-5">Total</div>
+    <div class="col-2 text-end muted">{{ total_tx }}</div>
+    <div class="col-3 text-end">{{ "{:,.2f}".format(total_amount) }}</div>
+    <div class="col-2 text-end">100%</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let transactions = {{ transactions_json|safe }};
+let chartData = {{ chart_json|safe }};
+let activeCategory = null;
+let percentSortAsc = false;
+
+// ---------- Render chart ----------
+function renderChart(filteredCategory=null){
+    let traces;
+
+    if(filteredCategory){
+        const filtered = chartData.filter(d => d.category === filteredCategory);
+        traces = [{
+            x: filtered.map(d=>d.period),
+            y: filtered.map(d=>d.amount),
+            type: 'bar',
+            name: filteredCategory
+        }];
+    } else {
+        traces = [
+            {
+                x: chartData.map(d=>d.period),
+                y: chartData.map(d=>-d.expenses),
+                type:'bar',
+                name:'Expenses',
+                marker:{color:'#dc3545'}
+            },
+            {
+                x: chartData.map(d=>d.period),
+                y: chartData.map(d=>d.sales),
+                type:'bar',
+                name:'Sales',
+                marker:{color:'#0d6efd'}
+            },
+            {
+                x: chartData.map(d=>d.period),
+                y: chartData.map(d=>d.net),
+                type:'scatter',
+                mode:'lines+markers',
+                name:'Net',
+                line:{color:'#198754'}
+            }
+        ];
+    }
+
+    const layout = {
+        barmode: 'group',   // 👈 THIS is the key
+        margin: {t:40,l:50,r:30,b:50},
+        yaxis: {
+            title: 'Amount',
+            zeroline: true
+        }
+    };
+
+    Plotly.react('expenses-chart', traces, layout, {responsive:true});
+}
+
+
+// ---------- Row click (filter chart) ----------
+document.getElementById('category-rows').addEventListener('click', e=>{
+    let row = e.target.closest('.category-row');
+    if(!row) return;
+    const category = row.dataset.category;
+    if(activeCategory === category) {
+        activeCategory = null;
+        renderChart();
+    } else {
+        activeCategory = category;
+        renderChart(category);
+    }
+});
+
+// ---------- Percent sort ----------
+document.getElementById('percentHeader').addEventListener('click', ()=>{
+    const container = document.getElementById('category-rows');
+    const rows = Array.from(container.querySelectorAll('.category-row'));
+    rows.sort((a,b)=>{
+        const pa = parseFloat(a.dataset.percent);
+        const pb = parseFloat(b.dataset.percent);
+        return percentSortAsc ? pa - pb : pb - pa;
+    });
+    percentSortAsc = !percentSortAsc;
+    rows.forEach(r => container.appendChild(r));
+});
+
+// ---------- AJAX refresh ----------
+function updateDashboard(){
+    const form = document.querySelector('.top-bar-form');
+    const data = new FormData(form);
+
+    fetch('{{ url_for("expenses_vs_sales_data") }}', {method:'POST', body:data})
+    .then(res=>res.json())
+    .then(json=>{
+        transactions = json.transactions_json;
+        chartData = json.chart_json;
+
+        // Rebuild rows
+        const container = document.getElementById('category-rows');
+        container.innerHTML = '';
+        json.categories.forEach(c=>{
+            const row = document.createElement('div');
+            row.className='row row-line py-1 category-row';
+            row.dataset.category = c.category;
+            row.dataset.percent = c.percent;
+            row.innerHTML = `
+                <div class="col-5 category">${c.category}</div>
+                <div class="col-2 text-end muted">${c.tx_count}</div>
+                <div class="col-3 text-end">${c.total_amount.toLocaleString(undefined,{minimumFractionDigits:2})}</div>
+                <div class="col-2 text-end">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="progress flex-grow-1" style="height:6px;">
+                            <div class="progress-bar"
+                                 title="${c.total_amount.toLocaleString(undefined,{minimumFractionDigits:2})} (${c.percent.toFixed(1)}%)"
+                                 style="width:${c.percent}%; background-color:${c.percent>=50?'#dc3545':c.percent>=25?'#fd7e14':'#198754'};">
+                            </div>
+                        </div>
+                        <small class="text-muted">${c.percent.toFixed(1)}%</small>
+                    </div>
+                </div>
+            `;
+            container.appendChild(row);
+        });
+
+        // Footer
+        document.querySelector('.row-footer .col-3').innerText =
+            json.total_amount.toLocaleString(undefined,{minimumFractionDigits:2});
+        document.querySelector('.row-footer .col-2.muted').innerText = json.total_tx;
+
+        // Restore chart filter if active
+        renderChart(activeCategory);
+    });
+}
+
+// Attach AJAX triggers
+document.querySelectorAll('.top-bar-form input, .top-bar-form select')
+    .forEach(el=>el.addEventListener('change', updateDashboard));
+
+// Initial render
+renderChart();
+</script>
+
+</body>
+</html>
