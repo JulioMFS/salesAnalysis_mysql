@@ -1,0 +1,76 @@
+<!-- ----------------- Debit Classifications Manager ----------------- -->
+<div class="accordion mt-4" id="debitClassAccordion">
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="headingDebit">
+      <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDebit" aria-expanded="false" aria-controls="collapseDebit">
+        Manage Debit Classifications
+      </button>
+    </h2>
+    <div id="collapseDebit" class="accordion-collapse collapse" aria-labelledby="headingDebit" data-bs-parent="#debitClassAccordion">
+      <div class="accordion-body">
+
+        <button class="btn btn-sm btn-primary mb-2" id="addDebitBtn">Add New Classification</button>
+
+        <div class="table-responsive" style="font-size:0.85rem;">
+          <table class="table table-bordered table-hover table-sm" id="debitTable">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th class="sortable" data-key="desc">Description Pattern &#x25B2;&#x25BC;</th>
+                <th class="sortable" data-key="cat">Category &#x25B2;&#x25BC;</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for row in classifications %}
+              <tr id="row-{{ row.id }}">
+                <td>{{ row.id }}</td>
+                <td class="desc">{{ row.description_pattern }}</td>
+                <td class="cat">{{ row.category }}</td>
+                <td>
+                  <button class="btn btn-sm btn-warning edit-btn"
+                          data-id="{{ row.id }}"
+                          data-description="{{ row.description_pattern }}"
+                          data-category="{{ row.category }}">
+                      Edit
+                  </button>
+                  <button class="btn btn-sm btn-danger delete-btn" data-id="{{ row.id }}">Delete</button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ---------------- Add/Edit Modal ---------------- -->
+<div class="modal fade" id="debitModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="debitForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="debitModalTitle">Add Classification</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="debitId">
+          <div class="mb-2">
+            <input type="text" id="debitDescription" class="form-control form-control-sm" placeholder="Description Pattern" required>
+          </div>
+          <div class="mb-2">
+            <input type="text" id="debitCategory" class="form-control form-control-sm" placeholder="Category" required>
+          </div>
+        </div>
+        <div class="modal-footer p-2">
+          <button type="submit" class="btn btn-sm btn-primary">Save</button>
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

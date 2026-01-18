@@ -101,48 +101,59 @@ function renderChart(filteredCategory=null){
         const filtered = chartData.filter(d => d.category === filteredCategory);
         traces = [{
             x: filtered.map(d=>d.period),
-            y: filtered.map(d=>d.amount),
+            y: filtered.map(d=>-d.amount),
             type: 'bar',
             name: filteredCategory
         }];
     } else {
         traces = [
             {
-                x: chartData.map(d=>d.period),
-                y: chartData.map(d=>-d.expenses),
-                type:'bar',
-                name:'Expenses',
-                marker:{color:'#dc3545'}
+                x: chartData.map(d => d.period),
+                y: chartData.map(d => -d.expenses),
+                type: 'bar',
+                name: 'Expenses',
+                marker: { color: '#dc3545' }
             },
             {
-                x: chartData.map(d=>d.period),
-                y: chartData.map(d=>d.sales),
-                type:'bar',
-                name:'Sales',
-                marker:{color:'#0d6efd'}
+                x: chartData.map(d => d.period),
+                y: chartData.map(d => d.sales),
+                type: 'bar',
+                name: 'Sales',
+                marker: { color: '#0d6efd' }
             },
             {
-                x: chartData.map(d=>d.period),
-                y: chartData.map(d=>d.net),
-                type:'scatter',
-                mode:'lines+markers',
-                name:'Net',
-                line:{color:'#198754'}
+                x: chartData.map(d => d.period),
+                y: chartData.map(d => d.net),
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Net',
+                yaxis: 'y2',               // 👈 SECOND AXIS
+                line: { color: '#198754', width: 2 },
+                marker: { size: 6 }
             }
         ];
     }
 
     const layout = {
-        barmode: 'group',   // 👈 THIS is the key
-        margin: {t:40,l:50,r:30,b:50},
+        barmode: 'group',
+        margin: { t: 40, l: 60, r: 60, b: 50 },
+
         yaxis: {
-            title: 'Amount',
+            title: 'Sales / Expenses',
             zeroline: true
+        },
+
+        yaxis2: {
+            title: 'Net',
+            overlaying: 'y',
+            side: 'right',
+            showgrid: false
         }
     };
 
-    Plotly.react('expenses-chart', traces, layout, {responsive:true});
+    Plotly.react('expenses-chart', traces, layout, { responsive: true });
 }
+
 
 
 // ---------- Row click (filter chart) ----------

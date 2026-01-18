@@ -1,0 +1,51 @@
+<div class="row g-3 mb-3">
+    <!-- Bank Upload -->
+    <div class="col-md-4">
+        <label id="bankBtn" class="btn btn-primary w-100 py-2">
+            <span class="btn-text">Upload Bank CSVs</span>
+            <span class="spinner-border spinner-border-sm ms-1 d-none"></span>
+            <input type="file" id="bankUpload" multiple accept=".csv" hidden>
+        </label>
+    </div>
+
+    <!-- Sales Upload -->
+    <div class="col-md-4">
+        <label id="salesBtn" class="btn btn-success w-100 py-2">
+            <span class="btn-text">Upload Sales Files</span>
+            <span class="spinner-border spinner-border-sm ms-1 d-none"></span>
+            <input type="file" id="salesUpload" multiple accept=".xlsx,.xls" hidden>
+        </label>
+    </div>
+
+    <!-- Daily Reconciliation -->
+    <div class="col-md-4">
+        <form method="POST">
+            <button type="submit" name="action" value="daily_recon" class="btn btn-warning w-100 py-2">
+                Run Daily Reconciliation
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Upload Progress -->
+<div id="uploadProgressWrapper" class="mt-2 d-none">
+    <div class="progress" style="height:15px;">
+        <div id="uploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%">0%</div>
+    </div>
+</div>
+
+<!-- Upload Report Modal -->
+<div class="modal fade" id="uploadReportModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Upload Report</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="white-space: pre-wrap; font-family: monospace; font-size:0.85rem;" id="uploadReportContent"></div>
+      <div class="modal-footer p-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>

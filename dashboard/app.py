@@ -1,23 +1,79 @@
 import json
-
+from db import get_connection
 from flask import Flask, render_template, request, redirect, url_for, flash
 from datetime import datetime, timedelta
 from db import execute_query
 import pandas as pd
-import plotly.express as px
-from markupsafe import Markup
 import subprocess
 import os
 
 app = Flask(__name__)
-app.secret_key = "dev-secret"
-
+app.secret_key = os.urandom(24)  # Temporary random key (development)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+from flask import Flask, request, jsonify
+import os
+from import_csv import import_bank_csvs
+from import_excel import import_sales_excels
+
+app = Flask(__name__)
+UPLOAD_DIR = os.path.join(os.getcwd(), 'uploads')
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+@app.route('/upload/<file_type>', methods=['POST'])
+def upload(file_type):
+    uploaded_files = request.files.getlist('files[]')
+    saved_files = set()
+    all_results = []
+
+    for file in uploaded_files:
+        dest_path = os.path.join(UPLOAD_DIR, file_type, file.filename)
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        file.save(dest_path)
+        saved_files.add(dest_path)
+
+    # Call importers per folder
+    if file_type == "bank":
+        for folder in set(os.path.dirname(f) for f in saved_files):
+            all_results.extend(import_bank_csvs(folder))
+    elif file_type == "sales":
+        for folder in set(os.path.dirname(f) for f in saved_files):
+            all_results.extend(import_sales_excels(folder))
+
+    # --- Build summary ---
+    def build_import_summary(results):
+        summary = {
+            "files_total": len(results),
+            "files_ok": 0,
+            "files_error": 0,
+            "rows_total": 0,
+            "min_date": None,
+            "max_date": None,
+        }
+        for r in results:
+            if r["status"] == "ok":
+                summary["files_ok"] += 1
+                summary["rows_total"] += r.get("rows", 0)
+                dmin = r.get("min_date")
+                dmax = r.get("max_date")
+                if dmin:
+                    summary["min_date"] = dmin if summary["min_date"] is None else min(summary["min_date"], dmin)
+                if dmax:
+                    summary["max_date"] = dmax if summary["max_date"] is None else max(summary["max_date"], dmax)
+            else:
+                summary["files_error"] += 1
+        return summary
+
+    summary = build_import_summary(all_results)
+    return jsonify({"status": "success", "summary": summary, "results": all_results})
 
 # ---------------- DASHBOARD ----------------
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
+    from db import get_connection  # make sure you import your DB connection
+    import subprocess
+
     if request.method == 'POST':
         action = request.form.get('action')
 
@@ -36,16 +92,24 @@ def dashboard():
             )
 
             if result.returncode == 0:
-                flash(f"Reconciliation completed successfully")
+                flash(f"{action.replace('_', ' ').title()} completed successfully", 'success')
                 if result.stdout:
-                    flash(result.stdout)
+                    flash(result.stdout, 'success')
             else:
-                flash("Reconciliation failed")
-                flash(result.stderr)
+                flash(f"{action.replace('_', ' ').title()} failed", 'danger')
+                flash(result.stderr, 'danger')
 
         return redirect(url_for('dashboard'))
 
-    return render_template('dashboard.html')
+    # ---------------- LOAD DEBIT CLASSIFICATIONS ----------------
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM debit_classifications ORDER BY id")
+    classifications = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return render_template('dashboard.html', classifications=classifications)
 
 
 @app.route("/expenses", methods=["GET", "POST"])
@@ -162,7 +226,7 @@ def expenses_vs_sales():
     )
 
     for r in chart_rows:
-        r['net'] = r['sales'] - r['expenses']
+        r['net'] = r['sales'] + r['expenses']
 
     chart_json = json.dumps(chart_rows, default=str)
 
@@ -502,6 +566,74 @@ def expenses_vs_sales_data():
         "chart_json": chart_json,
         "transactions_json": transactions  # optional, for modal
     }
+
+# ----- View page -----
+@app.route('/debit_classifications', methods=['GET'])
+def debit_classifications():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM debit_classifications ORDER BY id")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('debit_classifications.html', classifications=rows)
+
+
+# ----- Add new -----
+from flask import jsonify, request
+
+# ---------------- Add classification ----------------
+@app.route('/add_classification', methods=['POST'])
+def add_classification():
+    description = request.form.get('description_pattern')
+    category = request.form.get('category')
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO debit_classifications (description_pattern, category) VALUES (%s, %s)",
+        (description, category)
+    )
+    conn.commit()
+    new_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    return jsonify({
+        'id': new_id,
+        'description_pattern': description,
+        'category': category
+    })
+
+# ---------------- Edit classification ----------------
+@app.route('/edit_classification/<int:id>', methods=['POST'])
+def edit_classification(id):
+    description = request.form.get('description_pattern')
+    category = request.form.get('category')
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE debit_classifications SET description_pattern=%s, category=%s WHERE id=%s",
+        (description, category, id)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({
+        'id': id,
+        'description_pattern': description,
+        'category': category
+    })
+
+# ---------------- Delete classification ----------------
+@app.route('/delete_classification/<int:id>', methods=['POST'])
+def delete_classification(id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM debit_classifications WHERE id=%s", (id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'id': id})
+
 
 if __name__ == '__main__':
     app.run(debug=True)
