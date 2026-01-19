@@ -257,7 +257,8 @@ def sales_vs_deposits():
 
     # Fetch bank credits
     credits = execute_query(
-        "SELECT transaction_date AS date, amount FROM bank_transactions WHERE transaction_type='credit'", fetch=True
+        "SELECT transaction_date AS date, amount FROM bank_transactions WHERE transaction_type='credit'",
+        fetch=True
     )
     deposits_df = pd.DataFrame(credits)
     if not deposits_df.empty:
@@ -266,18 +267,21 @@ def sales_vs_deposits():
     else:
         deposits_df = pd.DataFrame(columns=['date', 'amount'])
 
-    # Date filtering
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    if start_date:
-        start_date = pd.to_datetime(start_date)
+    # Date filtering — get from query parameters
+    start_date_param = request.args.get('start_date')
+    end_date_param = request.args.get('end_date')
+
+    if start_date_param:
+        start_date = pd.to_datetime(start_date_param)
     else:
         start_date = sales_df['date'].min() if not sales_df.empty else pd.Timestamp.today()
-    if end_date:
-        end_date = pd.to_datetime(end_date)
+
+    if end_date_param:
+        end_date = pd.to_datetime(end_date_param)
     else:
         end_date = sales_df['date'].max() if not sales_df.empty else pd.Timestamp.today()
 
+    # Filter dataframes
     sales_df = sales_df[(sales_df['date'] >= start_date) & (sales_df['date'] <= end_date)]
     deposits_df = deposits_df[(deposits_df['date'] >= start_date) & (deposits_df['date'] <= end_date)]
 
@@ -298,7 +302,7 @@ def sales_vs_deposits():
     merged['difference'] = merged['amount'] - merged['credit_amount']
     merged['accumulated'] = merged['difference'].cumsum()
 
-    # Prepare single "period" for template (all in one for now)
+    # Prepare single "period" for template
     period = {
         'start_date': start_date.date(),
         'end_date': end_date.date(),
@@ -319,13 +323,13 @@ def sales_vs_deposits():
 
     all_periods = [period]
 
+    # Render template with dates preserved
     return render_template(
         'sales_vs_deposits.html',
         all_periods=all_periods,
         start_date=start_date.date(),
         end_date=end_date.date()
     )
-
 
 # --- Helper function to build period dictionary ---
 def build_period(sales_rows, deposits_rows, start_date, end_date):
@@ -636,4 +640,4 @@ def delete_classification(id):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5001)

@@ -17,7 +17,9 @@
 <body class="container mt-4">
 
 <!-- Back button -->
-<a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-smaller mb-3">← Back to Dashboard</a>
+<a href="{{ url_for('dashboard', start_date=start_date, end_date=end_date) }}" class="btn btn-secondary btn-smaller mb-3">
+    ← Back to Dashboard
+</a>
 
 <!-- Date selection form -->
 <form method="get" class="row g-3 mb-4">
@@ -62,9 +64,14 @@
                     <td class="text-end">{{ "{:,.2f}".format(row.sales_amount) }}</td>
                     <td class="text-end">
                         {% if row.credit_amount > 0 %}
-                        <a href="{{ url_for('bank_details', date=row.date.strftime('%Y-%m-%d'), start_period=period.start_date, end_period=period.end_date) }}">
-                            {{ "{:,.2f}".format(row.credit_amount) }}
-                        </a>
+                            <a href="{{ url_for(
+                                'bank_details',
+                                date=row.date.strftime('%Y-%m-%d'),
+                                start_date=start_date,
+                                end_date=end_date
+                            ) }}">
+                                {{ "{:,.2f}".format(row.credit_amount) }}
+                            </a>
                         {% else %}
                             {{ "{:,.2f}".format(row.credit_amount) }}
                         {% endif %}

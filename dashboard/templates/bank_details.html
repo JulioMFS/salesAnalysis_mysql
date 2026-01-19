@@ -15,7 +15,11 @@
 </head>
 <body class="container mt-4">
 
-<a href="{{ url_for('sales_vs_deposits') }}" class="btn btn-secondary btn-smaller mb-3">← Back to Sales vs Deposits</a>
+<!-- Back button: preserve start_date & end_date -->
+<a href="{{ url_for('sales_vs_deposits', start_date=start_date, end_date=end_date) }}"
+   class="btn btn-secondary btn-smaller mb-3">
+    ← Back to Sales vs Deposits
+</a>
 
 <h5>Bank Credits on {{ date }}</h5>
 
