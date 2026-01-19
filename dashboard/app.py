@@ -4,8 +4,8 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from datetime import datetime, timedelta
 from db import execute_query
 import pandas as pd
-import subprocess
 import os
+from datetime import date, datetime
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Temporary random key (development)
@@ -243,93 +243,83 @@ def expenses_vs_sales():
         chart_json=chart_json  # 👈 REQUIRED
     )
 
-
 @app.route('/sales_vs_deposits')
 def sales_vs_deposits():
-    # Fetch sales
-    sales = execute_query("SELECT sale_date AS date, amount FROM sales", fetch=True)
-    sales_df = pd.DataFrame(sales)
-    if not sales_df.empty:
-        sales_df['date'] = pd.to_datetime(sales_df['date'])
-        sales_df['amount'] = sales_df['amount'].astype(float)
-    else:
-        sales_df = pd.DataFrame(columns=['date', 'amount'])
-
-    # Fetch bank credits
-    credits = execute_query(
-        "SELECT transaction_date AS date, amount FROM bank_transactions WHERE transaction_type='credit'",
-        fetch=True
-    )
-    deposits_df = pd.DataFrame(credits)
-    if not deposits_df.empty:
-        deposits_df['date'] = pd.to_datetime(deposits_df['date'])
-        deposits_df['amount'] = deposits_df['amount'].astype(float)
-    else:
-        deposits_df = pd.DataFrame(columns=['date', 'amount'])
-
-    # Date filtering — get from query parameters
+    # Get query params
     start_date_param = request.args.get('start_date')
     end_date_param = request.args.get('end_date')
 
-    if start_date_param:
-        start_date = pd.to_datetime(start_date_param)
-    else:
-        start_date = sales_df['date'].min() if not sales_df.empty else pd.Timestamp.today()
+    today = date.today()
+    last_year = today.year - 1
 
-    if end_date_param:
-        end_date = pd.to_datetime(end_date_param)
-    else:
-        end_date = sales_df['date'].max() if not sales_df.empty else pd.Timestamp.today()
+    # Default start: Jan 1 of last year, default end: today
+    start_date = datetime.strptime(start_date_param, "%Y-%m-%d").date() if start_date_param else date(last_year, 1, 1)
+    end_date = datetime.strptime(end_date_param, "%Y-%m-%d").date() if end_date_param else today
 
-    # Filter dataframes
-    sales_df = sales_df[(sales_df['date'] >= start_date) & (sales_df['date'] <= end_date)]
-    deposits_df = deposits_df[(deposits_df['date'] >= start_date) & (deposits_df['date'] <= end_date)]
+    # Fetch sales
+    sales_df = execute_query(
+        "SELECT sale_date, SUM(amount) as total_sales FROM sales "
+        "WHERE DATE(sale_date) BETWEEN %s AND %s "
+        "GROUP BY sale_date",
+        (start_date, end_date),
+        fetch=True
+    )
+    sales_df = pd.DataFrame(sales_df)
+    if not sales_df.empty:
+        sales_df['sale_date'] = pd.to_datetime(sales_df['sale_date']).dt.date
 
-    # Group bank credits per date
-    daily_credits = deposits_df.groupby('date')['amount'].sum().reset_index()
-    daily_credits.rename(columns={'amount': 'credit_amount'}, inplace=True)
+    # Fetch deposits
+    deposits_df = execute_query(
+        "SELECT transaction_date, description, amount FROM bank_transactions "
+        "WHERE transaction_type='credit' AND DATE(transaction_date) BETWEEN %s AND %s",
+        (start_date, end_date),
+        fetch=True
+    )
+    deposits_df = pd.DataFrame(deposits_df)
+    if not deposits_df.empty:
+        deposits_df['transaction_date'] = pd.to_datetime(deposits_df['transaction_date']).dt.date
 
-    # Merge sales and daily credits
-    merged = pd.merge(
-        sales_df.groupby('date')['amount'].sum().reset_index(),
-        daily_credits,
-        on='date',
-        how='outer'
-    ).fillna(0)
-    merged = merged.sort_values('date')
+    # Compute periods data
+    # Example: simple all_periods with rows list
+    all_periods = []
 
-    # Compute difference and accumulated
-    merged['difference'] = merged['amount'] - merged['credit_amount']
-    merged['accumulated'] = merged['difference'].cumsum()
-
-    # Prepare single "period" for template
-    period = {
-        'start_date': start_date.date(),
-        'end_date': end_date.date(),
-        'total_sales': merged['amount'].sum(),
-        'total_credits': merged['credit_amount'].sum(),
-        'total_diff': merged['difference'].sum(),
-        'rows': []
-    }
-
-    for _, row in merged.iterrows():
-        period['rows'].append({
-            'date': row['date'],
-            'sales_amount': float(row['amount']),
-            'credit_amount': float(row['credit_amount']),
-            'difference': float(row['difference']),
-            'accumulated': float(row['accumulated'])
+    # Example simple period for now (replace with your logic)
+    if not sales_df.empty or not deposits_df.empty:
+        # Merge sales and deposits by date
+        dates = sorted(set(sales_df['sale_date'].tolist() + deposits_df['transaction_date'].tolist()))
+        accumulated = 0
+        period_rows = []
+        for d in dates:
+            sales_amount = sales_df[sales_df['sale_date'] == d]['total_sales'].sum() if not sales_df.empty else 0
+            credit_amount = deposits_df[deposits_df['transaction_date'] == d]['amount'].sum() if not deposits_df.empty else 0
+            difference = sales_amount - credit_amount
+            accumulated += difference
+            credited_date = d  # or your logic for DEPOSITO mapping
+            period_rows.append({
+                'date': d,
+                'sales_amount': sales_amount,
+                'credit_amount': credit_amount,
+                'difference': difference,
+                'accumulated': accumulated,
+                'credited_date': credited_date
+            })
+        all_periods.append({
+            'start_date': start_date,
+            'end_date': end_date,
+            'total_sales': sales_df['total_sales'].sum() if not sales_df.empty else 0,
+            'total_credits': deposits_df['amount'].sum() if not deposits_df.empty else 0,
+            'total_diff': (sales_df['total_sales'].sum() if not sales_df.empty else 0) -
+                          (deposits_df['amount'].sum() if not deposits_df.empty else 0),
+            'rows': period_rows
         })
 
-    all_periods = [period]
-
-    # Render template with dates preserved
     return render_template(
         'sales_vs_deposits.html',
-        all_periods=all_periods,
-        start_date=start_date.date(),
-        end_date=end_date.date()
+        start_date=start_date,
+        end_date=end_date,
+        all_periods=all_periods
     )
+
 
 # --- Helper function to build period dictionary ---
 def build_period(sales_rows, deposits_rows, start_date, end_date):
@@ -439,43 +429,80 @@ def expenses_drilldown():
         view=view
     )
 
+from datetime import date, datetime
+
+
 @app.route('/bank_details')
 def bank_details():
-    date = request.args.get('date')
-    start_period = request.args.get('start_period')
-    end_period = request.args.get('end_period')
+    import pandas as pd
+    from flask import request, render_template
 
-    date = pd.to_datetime(date)
+    # Get parameters
+    date_param = request.args.get('date')
+    start_date_param = request.args.get('start_date')
+    end_date_param = request.args.get('end_date')
 
-    # Fetch bank credits for that date
-    transactions = execute_query(
-        "SELECT transaction_date, description, amount, transaction_type "
-        "FROM bank_transactions "
-        "WHERE transaction_type='credit' AND DATE(transaction_date)=%s",
-        (date.date(),),
+    # Convert to datetime.date
+    date = pd.to_datetime(date_param).date() if date_param else pd.Timestamp.today().date()
+    start_date = pd.to_datetime(start_date_param).date() if start_date_param else date
+    end_date = pd.to_datetime(end_date_param).date() if end_date_param else date
+
+    # Fetch all bank credits
+    deposits = execute_query(
+        "SELECT transaction_date, description, amount FROM bank_transactions "
+        "WHERE transaction_type='credit' ORDER BY transaction_date",
         fetch=True
     )
+    deposits_df = pd.DataFrame(deposits, columns=['transaction_date', 'description', 'amount'])
 
-    # Fetch total sales for the same date
-    sales = execute_query(
-        "SELECT SUM(amount) as total_sales FROM sales WHERE DATE(sale_date)=%s",
-        (date.date(),),
-        fetch=True
-    )
-    total_sales = float(sales[0]['total_sales']) if sales and sales[0]['total_sales'] else 0
+    if not deposits_df.empty:
+        # Convert to datetime.date
+        deposits_df['transaction_date'] = pd.to_datetime(deposits_df['transaction_date']).dt.date
+        deposits_df['amount'] = deposits_df['amount'].astype(float)
+    else:
+        deposits_df = pd.DataFrame(columns=['transaction_date', 'description', 'amount'])
 
-    # Add sales_amount to each transaction for diff calculation
-    for tx in transactions:
-        tx['amount'] = float(tx['amount'])
-        tx['sales_amount'] = total_sales
+    # Find previous DEPOSITO before 'date'
+    deposito_dates = deposits_df[deposits_df['description'] == 'DEPOSITO']['transaction_date']
+    prev_deposito_date = deposito_dates[deposito_dates < date].max() if not deposito_dates.empty else date
+
+    # Filter transactions: > previous DEPOSITO and <= selected date
+    filtered_df = deposits_df[
+        (deposits_df['transaction_date'] >= prev_deposito_date) &
+        (deposits_df['transaction_date'] <= date)
+        ].copy()
+
+    filtered_df = filtered_df[filtered_df['description'] != 'DEPOSITO']
+    filtered_df = filtered_df.sort_values('transaction_date', ascending=True)
+    filtered_df['credited_date'] = prev_deposito_date
+
+    # Sort by date ascending
+    filtered_df = filtered_df.sort_values('transaction_date', ascending=True)
+
+    # Assign credited date (previous DEPOSITO date)
+    filtered_df['credited_date'] = prev_deposito_date
+
+    # Prepare for template
+    transactions = filtered_df.to_dict(orient='records')
+
+    # Optional: compute totals for display
+    total_credits = float(filtered_df['amount'].sum()) if not filtered_df.empty else 0.0
+
+    # If this page does NOT show sales, define safe defaults
+    total_sales = 0.0
+    total_diff = total_sales - total_credits
 
     return render_template(
         'bank_details.html',
         transactions=transactions,
-        date=date.date(),
-        start_period=start_period,
-        end_period=end_period
+        date=date,  # datetime.date
+        total_sales=total_sales,
+        total_credits=total_credits,
+        total_diff=total_diff,
+        start_date=start_date,
+        end_date=end_date
     )
+
 
 @app.route('/expenses_vs_sales_data', methods=['POST'])
 def expenses_vs_sales_data():
