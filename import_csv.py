@@ -4,7 +4,7 @@ import unicodedata
 import pandas as pd
 from io import StringIO
 from db import get_connection
-
+zonesoft_link = 'https://zsbmsv2.zonesoft.org/#!/rpt-tp-valores-dia'
 # ----------------------------
 # Normalize text for header detection
 # ----------------------------
@@ -176,3 +176,20 @@ def import_bank_csvs(folder_path):
     cursor.close()
     conn.close()
     return results
+
+def import_single_bank_csv(file_path):
+    folder = os.path.dirname(file_path)
+    filename = os.path.basename(file_path)
+
+    results = import_bank_csvs(folder)
+
+    # Return ONLY the result for this file
+    for r in results:
+        if r.get("file") == filename:
+            return r
+
+    return {
+        "file": filename,
+        "status": "error",
+        "message": "File not processed"
+    }

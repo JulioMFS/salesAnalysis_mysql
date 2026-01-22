@@ -7,38 +7,52 @@ import pandas as pd
 import os
 from datetime import date, datetime
 
-app = Flask(__name__)
-app.secret_key = os.urandom(24)  # Temporary random key (development)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 from flask import Flask, request, jsonify
 import os
-from import_csv import import_bank_csvs
-from import_excel import import_sales_excels
+from import_csv import import_single_bank_csv
+from import_excel import import_single_sales_excel
+
 
 app = Flask(__name__)
+# ✅ REQUIRED for sessions + flash
+app.secret_key = os.environ.get(
+    "FLASK_SECRET_KEY",
+    "dev-secret-key-change-me"
+)
 UPLOAD_DIR = os.path.join(os.getcwd(), 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 
 @app.route('/upload/<file_type>', methods=['POST'])
 def upload(file_type):
     uploaded_files = request.files.getlist('files[]')
-    saved_files = set()
+    saved_files = []
     all_results = []
 
     for file in uploaded_files:
+        # --- Validation for sales files ---
+        if file_type == "sales":
+            filename_lower = file.filename.lower()
+            if not (filename_lower.startswith("vendas") and filename_lower.endswith(".xlsx")):
+                return jsonify({
+                    "status": "error",
+                    "message": f"Invalid file name: {file.filename}. Expected Vendas*.xlsx"
+                }), 400
+
+        # --- Save file ---
         dest_path = os.path.join(UPLOAD_DIR, file_type, file.filename)
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         file.save(dest_path)
-        saved_files.add(dest_path)
+        saved_files.append(dest_path)
 
-    # Call importers per folder
-    if file_type == "bank":
-        for folder in set(os.path.dirname(f) for f in saved_files):
-            all_results.extend(import_bank_csvs(folder))
-    elif file_type == "sales":
-        for folder in set(os.path.dirname(f) for f in saved_files):
-            all_results.extend(import_sales_excels(folder))
+    # --- Call importers PER FILE (not per folder) ---
+    for file_path in saved_files:
+        if file_type == "bank":
+            all_results.append(import_single_bank_csv(file_path))
+        elif file_type == "sales":
+            all_results.append(import_single_sales_excel(file_path))
 
     # --- Build summary ---
     def build_import_summary(results):
@@ -65,7 +79,13 @@ def upload(file_type):
         return summary
 
     summary = build_import_summary(all_results)
-    return jsonify({"status": "success", "summary": summary, "results": all_results})
+    return jsonify({
+        "status": "success",
+        "summary": summary,
+        "results": all_results
+    })
+
+
 
 # ---------------- DASHBOARD ----------------
 @app.route('/', methods=['GET', 'POST'])

@@ -4,6 +4,49 @@
     <meta charset="UTF-8">
     <title>Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+    .upload-hint {
+        font-size: 0.6rem;
+        font-style: italic;
+        opacity: 0.75;
+        text-align: center;
+    }
+    .upload-zone {
+        border: 2px dashed #ced4da;
+        border-radius: 0.5rem;
+        padding: 1.2rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-weight: 500;
+        user-select: none;
+    }
+    .upload-bank {
+        background: #0d6efd10;
+        border-color: #0d6efd;
+        color: #0d6efd;
+    }
+    .upload-bank:hover { background: #0d6efd30; }
+    .upload-sales {
+        background: #19875410;
+        border-color: #198754;
+        color: #198754;
+    }
+    .upload-sales:hover { background: #19875430; }
+    .upload-zone.dragover {
+        background: #212529 !important;
+        color: #fff !important;
+        border-color: #212529 !important;
+    }
+    .upload-btn {
+        cursor: pointer;
+        padding: 0.75rem 1rem;
+        transition: all 0.2s ease;
+        font-weight: 500;
+        user-select: none;
+    }
+    .upload-btn.dragover.btn-primary { background-color: #0b5ed7; color: #fff; }
+    .upload-btn.dragover.btn-success { background-color: #157347; color: #fff; }
+    </style>
 </head>
 <body>
 
@@ -13,13 +56,17 @@
     <!-- Upload / Reconciliation Section -->
     {% include '_upload_section.html' %}
 
-    <!-- Navigation Buttons -->
+    <!-- Navigation Buttons (2 per row, equal size) -->
     <div class="row g-3 mb-4">
-        <div class="col-md-6">
-            <a href="{{ url_for('expenses_vs_sales') }}" class="btn btn-info w-100 py-2">Expenses vs Sales</a>
+        <div class="col-md-6 d-flex">
+            <a href="{{ url_for('expenses_vs_sales') }}" class="btn btn-info flex-fill py-2">
+                Expenses vs Sales
+            </a>
         </div>
-        <div class="col-md-6">
-            <a href="{{ url_for('sales_vs_deposits') }}" class="btn btn-warning w-100 py-2">Sales vs Bank Deposits</a>
+        <div class="col-md-6 d-flex">
+            <a href="{{ url_for('sales_vs_deposits') }}" class="btn btn-warning flex-fill py-2">
+                Sales vs Bank Deposits
+            </a>
         </div>
     </div>
 
@@ -43,5 +90,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='upload.js') }}"></script>
+
 </body>
 </html>

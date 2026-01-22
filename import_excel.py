@@ -2,14 +2,33 @@ import os
 import pandas as pd
 from db import get_connection
 
+
 def parse_euro_amount(value):
-    if pd.isna(value):
+    if pd.isna(value) or value == "":
         return None
-    value = str(value).replace("€", "").replace("\u00a0", "").replace(" ", "").replace(".", "").replace(",", ".").strip()
+
+    value = (
+        str(value)
+        .replace("€", "")
+        .replace("\u00a0", "")
+        .replace(" ", "")
+        .replace(".", "")
+        .replace(",", ".")
+        .strip()
+    )
+
     try:
-        return float(value)
+        amount = float(value)
+
+        # Divide by 1000 if value looks inflated
+        if abs(amount) > 1000:
+            amount = amount / 1000
+
+        return amount
+
     except ValueError:
         return None
+
 
 def import_sales_excels(folder_path):
     results = []
@@ -17,7 +36,13 @@ def import_sales_excels(folder_path):
     cursor = conn.cursor()
 
     for filename in os.listdir(folder_path):
-        if filename.startswith("~$") or not filename.lower().endswith((".xls", ".xlsx")):
+
+        # ✅ HARD FILTER
+        if (
+            filename.startswith("~$")
+            or not filename.startswith("Vendas")
+            or not filename.lower().endswith(".xlsx")
+        ):
             continue
 
         file_path = os.path.join(folder_path, filename)
@@ -25,71 +50,64 @@ def import_sales_excels(folder_path):
         try:
             df = pd.read_excel(file_path, dtype=str)
         except Exception as e:
-            results.append({"file": filename, "status": "error", "message": f"Failed to read Excel: {e}"})
+            results.append({
+                "file": filename,
+                "status": "error",
+                "message": f"Failed to read Excel: {e}"
+            })
             continue
 
         df = df.fillna("")
-
-        # -------- Parse column B for dates --------
-        if df.shape[1] > 1:
-            df["sale_date"] = pd.to_datetime(df.iloc[:, 1], dayfirst=True, errors="coerce")
-        else:
-            df["sale_date"] = None
-
-        # -------- Prepare amounts safely --------
-        df["amount_q"] = df.iloc[:, 16].apply(parse_euro_amount) if df.shape[1] > 16 else None
-        df["amount_r"] = df.iloc[:, 17].apply(parse_euro_amount) if df.shape[1] > 17 else None
-
-        current_date = None
         rows_to_insert = []
 
         for _, row in df.iterrows():
-            if pd.notna(row.get("sale_date")):
-                current_date = row["sale_date"].date()
-            if current_date is None:
-                continue  # Skip rows before first date
+            # Column B → Date
+            sale_date = pd.to_datetime(row.iloc[1], dayfirst=True, errors="coerce")
+            if pd.isna(sale_date):
+                continue
 
-            amount = None
-            # Column Q if L (index 11) is empty
-            if df.shape[1] > 11 and row.iloc[11] == "":
-                amount = row["amount_q"]
-            # Column R if M (index 12) is empty
-            elif df.shape[1] > 12 and row.iloc[12] == "":
-                amount = row["amount_r"]
+            # Column C → Payment method
+            payment_method = row.iloc[2].strip()
+            if not payment_method:
+                continue
 
-            if pd.notna(amount):
-                rows_to_insert.append((current_date, amount))
-                current_date = None
+            # Column D → Amount
+            amount = parse_euro_amount(row.iloc[3])
+            if amount is None:
+                continue
+
+            rows_to_insert.append(
+                (sale_date.date(), payment_method, amount)
+            )
 
         if not rows_to_insert:
-            results.append({"file": filename, "status": "error", "message": "No valid sales rows"})
+            results.append({
+                "file": filename,
+                "status": "error",
+                "message": "No valid sales rows"
+            })
             continue
 
         min_date = min(r[0] for r in rows_to_insert)
         max_date = max(r[0] for r in rows_to_insert)
 
         try:
-            cursor.execute(
-                "DELETE FROM sales WHERE source_file=%s AND sale_date BETWEEN %s AND %s",
-                (filename, min_date, max_date),
-            )
-            for sale_date, amount in rows_to_insert:
+            for sale_date, payment_method, amount in rows_to_insert:
                 cursor.execute(
                     """
-                    INSERT INTO sales (sale_date, amount, source_file)
+                    INSERT INTO sales (sale_date, payment_method, amount)
                     VALUES (%s, %s, %s)
                     ON DUPLICATE KEY UPDATE
-                        amount = VALUES(amount),
-                        source_file = VALUES(source_file)
+                        amount = VALUES(amount)
                     """,
-                    (sale_date, amount, filename),
+                    (sale_date, payment_method, amount),
                 )
+
             conn.commit()
 
             results.append({
                 "file": filename,
                 "status": "ok",
-                "message": f"{len(rows_to_insert)} rows imported",
                 "rows": len(rows_to_insert),
                 "min_date": min_date.isoformat(),
                 "max_date": max_date.isoformat(),
@@ -97,8 +115,28 @@ def import_sales_excels(folder_path):
 
         except Exception as e:
             conn.rollback()
-            results.append({"file": filename, "status": "error", "message": str(e)})
+            results.append({
+                "file": filename,
+                "status": "error",
+                "message": str(e)
+            })
 
     cursor.close()
     conn.close()
     return results
+
+def import_single_sales_excel(file_path):
+    folder = os.path.dirname(file_path)
+    filename = os.path.basename(file_path)
+
+    results = import_sales_excels(folder)
+
+    for r in results:
+        if r.get("file") == filename:
+            return r
+
+    return {
+        "file": filename,
+        "status": "error",
+        "message": "File not processed"
+    }

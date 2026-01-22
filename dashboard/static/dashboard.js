@@ -66,10 +66,26 @@ document.getElementById('bankUpload').addEventListener('change', e => {
     const files = e.target.files;
     if (!validateFiles(files,['csv'])) e.target.value=''; else uploadFiles(files,'bank','bankBtn');
 });
-document.getElementById('salesUpload').addEventListener('change', e => {
-    const files = e.target.files;
-    if (!validateFiles(files,['xls','xlsx'])) e.target.value=''; else uploadFiles(files,'sales','salesBtn');
+document.getElementById("salesUpload").addEventListener("change", function () {
+    const files = Array.from(this.files);
+
+    const invalid = files.filter(f =>
+        !f.name.startsWith("Vendas") || !f.name.toLowerCase().endsWith(".xlsx")
+    );
+
+    if (invalid.length > 0) {
+        alert(
+            "Invalid file(s):\n" +
+            invalid.map(f => f.name).join("\n") +
+            "\n\nOnly Vendas*.xlsx files are allowed."
+        );
+        this.value = "";
+        return;
+    }
+
+    uploadFiles("sales", files);
 });
+
 
 // ========================== DEBIT CLASSIFICATIONS AJAX ==========================
 const debitModal = new bootstrap.Modal(document.getElementById('debitModal'));
