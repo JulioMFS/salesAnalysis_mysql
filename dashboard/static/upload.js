@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
         dropZoneId: "salesDropZone",
         inputId: "salesUpload",
         fileType: "sales",
-        filenameRegex: /^Vendas.*\.xlsx$/i
+        filenameRegex: /^Vendas.*\.pdf$/i
     });
 
 });

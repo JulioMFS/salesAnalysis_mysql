@@ -122,21 +122,22 @@ def import_bank_csvs(folder_path):
             df = pd.read_csv(StringIO(csv_text), sep=";", header=0, dtype=str, engine="python", on_bad_lines="skip")
             df.columns = df.columns.str.lower().str.strip().str.replace(".", "", regex=False)
             df = df.rename(columns={
-                "data mov": "date",
+                "data mov": "movement_date",
                 "data-valor": "value_date",
                 "descrição": "description",
                 "montante": "amount",
                 "saldo contabilístico após movimento": "balance",
             })
 
-            if "date" not in df.columns or "amount" not in df.columns:
-                results.append({"file": filename, "status": "error", "message": "Missing required columns"})
+            if "movement_date" not in df.columns or "amount" not in df.columns:
+                results.append({"file": filename, "status": "error", "message": "Missing required columns (movement_date, amount)"})
                 continue
 
-            df["date"] = pd.to_datetime(df["value_date"], dayfirst=True, errors="coerce")
+            df["movement_date"] = pd.to_datetime(df["movement_date"], dayfirst=True, errors="coerce")
+            df["value_date"] = pd.to_datetime(df["value_date"], dayfirst=True, errors="coerce")
             df["amount"] = df["amount"].apply(parse_pt_amount)
             df["description"] = df.get("description", "").fillna("").astype(str)
-            df = df.dropna(subset=["date", "amount"])
+            df = df.dropna(subset=["movement_date", "amount"])
             if df.empty:
                 results.append({"file": filename, "status": "error", "message": "No valid transactions"})
                 continue
@@ -149,14 +150,19 @@ def import_bank_csvs(folder_path):
                 cursor.execute(
                     """
                     INSERT INTO bank_transactions
-                        (transaction_date, description, amount, transaction_type)
-                    VALUES (%s, %s, %s, %s)
+                        (movement_date, transaction_date, description, amount, transaction_type)
+                    VALUES (%s, %s, %s, %s, %s)
                     ON DUPLICATE KEY UPDATE
                         description = VALUES(description),
                         amount = VALUES(amount),
-                        transaction_type = VALUES(transaction_type)
+                        transaction_type = VALUES(transaction_type),
+                        transaction_date = VALUES(transaction_date)
                     """,
-                    (row["date"].date(), row["description"][:500], row["amount"], row["transaction_type"])
+                    (row["movement_date"].date(),
+                     row["value_date"].date() if not pd.isna(row["value_date"]) else None,
+                     row["description"][:500],
+                     row["amount"],
+                     row["transaction_type"])
                 )
                 inserted += 1
 
@@ -166,8 +172,8 @@ def import_bank_csvs(folder_path):
                 "status": "ok",
                 "message": f"{inserted} rows imported",
                 "rows": inserted,
-                "min_date": df["date"].min().date().isoformat(),
-                "max_date": df["date"].max().date().isoformat(),
+                "min_date": df["movement_date"].min().date().isoformat(),
+                "max_date": df["movement_date"].max().date().isoformat(),
             })
 
         except Exception as e:

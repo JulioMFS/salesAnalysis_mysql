@@ -12,7 +12,9 @@
         .diff-positive { color: green; font-weight: bold; }
         .card-header { font-size: 0.9rem; padding: 0.35rem 0.75rem; }
         .btn-smaller { font-size: 0.8rem; padding: 0.25rem 0.5rem; }
+        .bg-warning { background-color: #ffe066 !important; }
     </style>
+
 </head>
 <body class="container mt-4">
 
@@ -45,53 +47,103 @@
           </span>
     </div>
     <div class="card-body p-0">
-        <table class="table table-bordered mb-0 table-sm">
-            <thead class="table-light">
+        <table class="table table-bordered table-sm mb-0">
+            <thead class="table-light text-center">
+
+                <!-- SECTION HEADERS -->
                 <tr>
-                    <th>Date</th>
-                    <th class="text-end">Sales</th>
-                    <th class="text-end">Bank</th>
-                    <th class="text-end">Diff</th>
-                    <th class="text-end">Accum</th>
-                    <th>Credited Sales Date</th>
+                    <th colspan="6" class="bg-secondary text-white">Cartões</th>
+                    <th colspan="5" class="bg-secondary text-white">Dinheiro</th>
+                </tr>
+
+                <!-- COLUMN HEADERS -->
+                <tr>
+                    <!-- CARTÕES -->
+                    <th>Data</th>
+                    <th>Dia</th>
+                    <th class="text-end">Cartões</th>
+                    <th class="text-end">POS Vendas</th>
+                    <th class="text-end">Diferença</th>
+                    <th class="text-end">Saldo</th>
+
+                    <!-- DINHEIRO -->
+                    <th class="text-end">Dinheiro</th>
+                    <th class="text-end">Depósito</th>
+                    <th class="text-end">Diferença</th>
+                    <th class="text-end">Saldo</th>
+                    <th>Dia</th>
                 </tr>
             </thead>
+
             <tbody>
             {% for row in period.rows %}
-                {% set row_class = "" %}
-                {% if row.credit_amount > 0 %}
-                    {% if row.credited_date < row.date %}
-                        {% set row_class = "table-danger" %}
-                    {% else %}
-                        {% set row_class = "table-success" %}
-                    {% endif %}
-                {% endif %}
-                <tr class="{{ row_class }}">
+                <tr {% if row.bank_deposit %}class="table-success"{% endif %}>
+
+                    <!-- CARTÕES -->
                     <td>{{ row.date }}</td>
-                    <td class="text-end">{{ "{:,.2f}".format(row.sales_amount) }}</td>
+                    <td>{{ row.day_name }}</td>
+
                     <td class="text-end">
-                        {% if row.credit_amount > 0 %}
-                        <a href="{{ url_for(
-                            'bank_details',
-                            date=row.date.strftime('%Y-%m-%d'),
-                            start_date=start_date,
-                            end_date=end_date
-                        ) }}">
-                            {{ "{:,.2f}".format(row.credit_amount) }}
-                        </a>
-                        {% else %}
-                            {{ "{:,.2f}".format(row.credit_amount) }}
+                        {{ "{:,.2f}".format(row.sales_card) }}
+                    </td>
+
+                    <td class="text-end">
+                        {% if row.bank_pos %}
+                            <a href="{{ url_for('bank_details', date=row.date) }}">
+                                {{ "{:,.2f}".format(row.bank_pos) }}
+                            </a>
                         {% endif %}
                     </td>
-                    <td class="text-end {{ 'diff-negative' if row.difference<0 else 'diff-positive' }}">
-                        {{ "{:,.2f}".format(row.difference) }}
+
+                    <td class="text-end {{ 'diff-negative' if row.diff_card < 0 else 'diff-positive' }}">
+                        {{ "{:,.2f}".format(row.diff_card) }}
                     </td>
-                    <td class="text-end">{{ "{:,.2f}".format(row.accumulated) }}</td>
-                    <td>{{ row.credited_date }}</td>
+
+                    <td class="text-end fw-bold">
+                        {% if row.card_balance is not none %}
+                            {{ "{:,.2f}".format(row.card_balance) }}
+                        {% endif %}
+                    </td>
+
+
+                    <!-- DINHEIRO -->
+                    <td class="text-end bg-warning">
+                        {{ "{:,.2f}".format(row.sales_cash) }}
+                    </td>
+
+                    <td class="text-end bg-warning">
+                        {% if row.bank_deposit %}
+                            {{ "{:,.2f}".format(row.bank_deposit) }}
+                        {% endif %}
+                    </td>
+
+                    <td class="text-end
+                        {% if row.diff_cash is not none %}
+                            {{ 'diff-negative' if row.diff_cash < 0 else 'diff-positive' }}
+                        {% endif %}
+                    ">
+                        {% if row.diff_cash is not none %}
+                            {{ "{:,.2f}".format(row.diff_cash) }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+
+
+                    <td class="text-end fw-bold">
+                        {% if row.cash_balance is not none %}
+                            {{ "{:,.2f}".format(row.cash_balance) }}
+                        {% endif %}
+                    </td>
+
+
+                    <td>{{ row.day_name }}</td>
                 </tr>
             {% endfor %}
             </tbody>
         </table>
+
+
     </div>
 </div>
 {% endfor %}

@@ -70,14 +70,14 @@ document.getElementById("salesUpload").addEventListener("change", function () {
     const files = Array.from(this.files);
 
     const invalid = files.filter(f =>
-        !f.name.startsWith("Vendas") || !f.name.toLowerCase().endsWith(".xlsx")
+        !f.name.startsWith("Vendas") || !f.name.toLowerCase().endsWith(".pdf")
     );
 
     if (invalid.length > 0) {
         alert(
             "Invalid file(s):\n" +
             invalid.map(f => f.name).join("\n") +
-            "\n\nOnly Vendas*.xlsx files are allowed."
+            "\n\nOnly Vendas*.pdf files are allowed."
         );
         this.value = "";
         return;

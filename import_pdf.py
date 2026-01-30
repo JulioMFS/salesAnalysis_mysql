@@ -1,31 +1,12 @@
 import os
+import re
+import pdfplumber
 import pandas as pd
 from db import get_connection
 
 
-def parse_euro_amount(value):
-    if pd.isna(value) or value == "":
-        return None
-
-    value = (
-        str(value)
-        .replace("€", "")
-        .replace("\u00a0", "")
-        .replace(" ", "")
-        .replace(".", "")
-        .replace(",", ".")
-        .strip()
-    )
-
-    try:
-        amount = float(value)
-        return amount
-
-    except ValueError:
-        return None
-
 def parse_pt_amount(value):
-    if pd.isna(value):
+    if value is None:
         return None
 
     value = str(value)
@@ -46,61 +27,71 @@ def parse_pt_amount(value):
     except ValueError:
         return None
 
-def import_sales_excels(folder_path):
+
+def import_sales_pdfs(folder_path):
     results = []
     conn = get_connection()
     cursor = conn.cursor()
 
     for filename in os.listdir(folder_path):
 
-        # ✅ HARD FILTER
+        # ✅ HARD FILTER (adjust if needed)
         if (
-            filename.startswith("~$")
+            not filename.lower().endswith(".pdf")
             or not filename.startswith("Vendas")
-            or not filename.lower().endswith(".xlsx")
         ):
             continue
 
         file_path = os.path.join(folder_path, filename)
+        rows_to_insert = []
 
         try:
-            df = pd.read_excel(
-                file_path,
-                converters={
-                    3: lambda v: str(v)  # Amount column ONLY
-                }
-            )
+            with pdfplumber.open(file_path) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if not text:
+                        continue
+
+                    for line in text.split("\n"):
+                        # Match lines like:
+                        # 1 01-12-2025 Dinheiro 542,420€
+                        match = re.match(
+                            r"\d+\s+"
+                            r"(\d{2}-\d{2}-\d{4})\s+"
+                            r"(.+?)\s+"
+                            r"([\d\s.,]+)€",
+                            line
+                        )
+
+                        if not match:
+                            continue
+
+                        sale_date_raw, payment_method, amount_raw = match.groups()
+
+                        sale_date = pd.to_datetime(
+                            sale_date_raw,
+                            dayfirst=True,
+                            errors="coerce"
+                        )
+
+                        if pd.isna(sale_date):
+                            continue
+
+                        amount = parse_pt_amount(amount_raw)
+                        if amount is None:
+                            continue
+
+                        rows_to_insert.append(
+                            (sale_date.date(), payment_method.strip(), amount)
+                        )
 
         except Exception as e:
             results.append({
                 "file": filename,
                 "status": "error",
-                "message": f"Failed to read Excel: {e}"
+                "message": f"Failed to read PDF: {e}"
             })
             continue
-
-        df = df.fillna("")
-        rows_to_insert = []
-
-        for _, row in df.iterrows():
-            # Column B → Date
-            sale_date = pd.to_datetime(row.iloc[1], dayfirst=True, errors="coerce")
-            if pd.isna(sale_date):
-                continue
-
-            # Column C → Payment method
-            payment_method = row.iloc[2].strip()
-            if not payment_method:
-                continue
-
-            # Column D → Amount
-            amount = parse_pt_amount(row.iloc[3])
-            if amount is None:
-                continue
-#            amount = amount / 1000
-            rows_to_insert.append(
-                (sale_date.date(), payment_method, amount)
-            )
 
         if not rows_to_insert:
             results.append({
@@ -147,11 +138,12 @@ def import_sales_excels(folder_path):
     conn.close()
     return results
 
-def import_single_sales_excel(file_path):
+
+def import_single_sales_pdf(file_path):
     folder = os.path.dirname(file_path)
     filename = os.path.basename(file_path)
 
-    results = import_sales_excels(folder)
+    results = import_sales_pdfs(folder)
 
     for r in results:
         if r.get("file") == filename:
