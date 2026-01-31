@@ -1,11 +1,14 @@
 import json
 from db import get_connection
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, abort
 from datetime import datetime, timedelta
 from db import execute_query
 import pandas as pd
 import os
 from decimal import Decimal
+from flask import jsonify, request
+from datetime import date
+import subprocess
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -89,9 +92,6 @@ def upload(file_type):
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
-    from db import get_connection  # make sure you import your DB connection
-    import subprocess
-
     if request.method == 'POST':
         action = request.form.get('action')
 
@@ -426,8 +426,6 @@ def build_period(sales_rows, deposits_rows, start_date, end_date):
 # ---------------- EXPENSE DRILLDOWN ----------------
 @app.route('/expenses_drilldown')
 def expenses_drilldown():
-    from datetime import datetime
-    import json
 
     # Get parameters from URL
     start_date_str = request.args.get('start_date')
@@ -504,71 +502,77 @@ def expenses_drilldown():
         view=view
     )
 
-from datetime import date, datetime
-
-
 @app.route('/bank_details')
 def bank_details():
- 
-    # Get parameters
+
     date_param = request.args.get('date')
     start_date_param = request.args.get('start_date')
     end_date_param = request.args.get('end_date')
 
-    # Convert to datetime.date
-    date = pd.to_datetime(date_param).date() if date_param else pd.Timestamp.today().date()
-    start_date = pd.to_datetime(start_date_param).date() if start_date_param else date
-    end_date = pd.to_datetime(end_date_param).date() if end_date_param else date
+    selected_date = (
+        pd.to_datetime(date_param).date()
+        if date_param else pd.Timestamp.today().date()
+    )
 
-    # Fetch all bank credits
+    start_date = (
+        pd.to_datetime(start_date_param).date()
+        if start_date_param else None
+    )
+
+    end_date = (
+        pd.to_datetime(end_date_param).date()
+        if end_date_param else None
+    )
+
     deposits = execute_query(
-        "SELECT transaction_date, description, amount FROM bank_transactions "
-        "WHERE transaction_type='credit' ORDER BY transaction_date",
+        "SELECT transaction_date, description, amount "
+        "FROM bank_transactions "
+        "WHERE transaction_type='credit' "
+        "ORDER BY transaction_date",
         fetch=True
     )
-    deposits_df = pd.DataFrame(deposits, columns=['transaction_date', 'description', 'amount'])
+
+    deposits_df = pd.DataFrame(
+        deposits,
+        columns=['transaction_date', 'description', 'amount']
+    )
 
     if not deposits_df.empty:
-        # Convert to datetime.date
-        deposits_df['transaction_date'] = pd.to_datetime(deposits_df['transaction_date']).dt.date
+        deposits_df['transaction_date'] = pd.to_datetime(
+            deposits_df['transaction_date']
+        ).dt.date
         deposits_df['amount'] = deposits_df['amount'].astype(float)
-    else:
-        deposits_df = pd.DataFrame(columns=['transaction_date', 'description', 'amount'])
 
-    # Find previous DEPOSITO before 'date'
-    deposito_dates = deposits_df[deposits_df['description'] == 'DEPOSITO']['transaction_date']
-    prev_deposito_date = deposito_dates[deposito_dates < date].max() if not deposito_dates.empty else date
+    deposito_dates = deposits_df[
+        deposits_df['description'] == 'DEPOSITO'
+    ]['transaction_date']
 
-    # Filter transactions: > previous DEPOSITO and <= selected date
+    prev_deposito_date = (
+        deposito_dates[deposito_dates < selected_date].max()
+        if not deposito_dates.empty else selected_date
+    )
+
     filtered_df = deposits_df[
         (deposits_df['transaction_date'] >= prev_deposito_date) &
-        (deposits_df['transaction_date'] <= date)
-        ].copy()
+        (deposits_df['transaction_date'] <= selected_date)
+    ].copy()
 
-    filtered_df = filtered_df[filtered_df['description'] != 'DEPOSITO']
-    filtered_df = filtered_df.sort_values('transaction_date', ascending=True)
+    filtered_df = filtered_df[
+        filtered_df['description'] != 'DEPOSITO'
+    ].sort_values('transaction_date')
+
     filtered_df['credited_date'] = prev_deposito_date
 
-    # Sort by date ascending
-    filtered_df = filtered_df.sort_values('transaction_date', ascending=True)
-
-    # Assign credited date (previous DEPOSITO date)
-    filtered_df['credited_date'] = prev_deposito_date
-
-    # Prepare for template
     transactions = filtered_df.to_dict(orient='records')
-
-    # Optional: compute totals for display
     total_credits = float(filtered_df['amount'].sum()) if not filtered_df.empty else 0.0
 
-    # If this page does NOT show sales, define safe defaults
     total_sales = 0.0
     total_diff = total_sales - total_credits
 
     return render_template(
         'bank_details.html',
         transactions=transactions,
-        date=date,  # datetime.date
+        date=selected_date,
         total_sales=total_sales,
         total_credits=total_credits,
         total_diff=total_diff,
@@ -576,6 +580,100 @@ def bank_details():
         end_date=end_date
     )
 
+@app.route('/deposit_breakdown')
+def deposit_breakdown():
+
+    deposit_date_param = request.args.get('deposit_date')
+    start_date_param = request.args.get('start_date')
+    end_date_param = request.args.get('end_date')
+
+    if not deposit_date_param:
+        abort(400, "Missing deposit_date")
+
+    deposit_date = pd.to_datetime(deposit_date_param).date()
+
+    start_date = pd.to_datetime(start_date_param).date() if start_date_param else None
+    end_date = pd.to_datetime(end_date_param).date() if end_date_param else None
+
+    # Fetch bank transactions
+    deposits = execute_query(
+        "SELECT transaction_date, description, amount "
+        "FROM bank_transactions "
+        "WHERE transaction_type='credit' "
+        " AND DATE(transaction_date) BETWEEN %s AND %s"
+        "ORDER BY transaction_date",
+        [start_date, end_date],
+        fetch=True
+    )
+
+    df = pd.DataFrame(
+        deposits,
+        columns=['transaction_date', 'description', 'amount']
+    )
+
+    df['transaction_date'] = pd.to_datetime(df['transaction_date']).dt.date
+    df['amount'] = df['amount'].astype(float)
+
+    # Get current depósito
+    # Get the depósito that closes this period
+    deposito_row = df[
+        (df['description'] == 'DEPOSITO ') &
+        (df['transaction_date'] >= deposit_date)
+        ].sort_values('transaction_date').head(1)
+
+    if deposito_row.empty:
+        abort(404, f"No DEPOSITO found on or after {deposit_date}")
+
+    deposito_date = deposito_row['transaction_date'].iloc[0]
+    deposito_amount = float(deposito_row['amount'].iloc[0])
+
+    deposito_amount = float(deposito_row['amount'].iloc[0])
+
+    # Find previous depósito
+    previous_deposito_date = df[
+        (df['description'] == 'DEPOSITO ') &
+        (df['transaction_date'] < deposit_date)
+    ]['transaction_date'].max()
+
+    # Fetch cash sales (Dinheiro)
+    cash_sales = execute_query(
+        "SELECT sale_date, amount "
+        "FROM sales "
+        "WHERE payment_method = 'Dinheiro'",
+        fetch=True
+    )
+
+    cash_df = pd.DataFrame(cash_sales, columns=['sale_date', 'amount'])
+    cash_df['sale_date'] = pd.to_datetime(cash_df['sale_date']).dt.date
+    cash_df['amount'] = cash_df['amount'].astype(float)
+
+    # Filter cash used for comparison
+    cash_used = cash_df[
+        (cash_df['sale_date'] >= previous_deposito_date) &
+        (cash_df['sale_date'] < deposit_date)
+        ].sort_values('sale_date')
+
+    total_cash = float(cash_used['amount'].sum())
+    diff = deposito_amount - total_cash
+    if diff is None:
+        diff_class = ""
+    elif diff < 0:
+        diff_class = "diff-negative"
+    else:
+        diff_class = "diff-positive"
+
+    return render_template(
+        'deposit_breakdown.html',
+        deposit_date=deposit_date,
+        deposito_amount=deposito_amount,
+        previous_deposito_date=previous_deposito_date,
+        cash_rows=cash_used.to_dict(orient='records'),
+        total_cash=total_cash,
+        diff=diff,
+        diff_class=diff_class,
+        start_date=start_date,
+        end_date=end_date
+    )
 
 @app.route('/expenses_vs_sales_data', methods=['POST'])
 def expenses_vs_sales_data():
@@ -684,7 +782,6 @@ def debit_classifications():
 
 
 # ----- Add new -----
-from flask import jsonify, request
 
 # ---------------- Add classification ----------------
 @app.route('/add_classification', methods=['POST'])
