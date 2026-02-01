@@ -6,28 +6,29 @@
     <style>
         body { font-size: 0.8rem; }
         .amount { text-align: right; }
-
         tfoot td.diff-negative {
             color: red;
             font-weight: bold;
         }
-
         tfoot td.diff-positive {
             color: green;
             font-weight: bold;
         }
+        tbody td.running-total.diff-negative {
+            color: red;
+            font-weight: bold;
+        }
+        tbody td.running-total.diff-positive {
+            color: green;
+            font-weight: bold;
+        }
     </style>
-
 </head>
 
 <body class="container mt-4">
 
 <!-- Back button -->
-<a href="{{ url_for(
-        'sales_vs_deposits',
-        start_date=start_date,
-        end_date=end_date
-    ) }}"
+<a href="{{ url_for('sales_vs_deposits', start_date=start_date, end_date=end_date) }}"
    class="btn btn-secondary mb-3">
     ← Back to Sales vs Deposits
 </a>
@@ -42,8 +43,16 @@
             <strong>Depósito date:</strong> {{ deposit_date }}
         </p>
         <p class="mb-1">
-            <strong>Period:</strong> {{ previous_deposito_date }} → {{ deposit_date }}
+            <strong>Period considered:</strong>
+            {{ previous_deposito_date if previous_deposito_date else "Start of records" }}
+            → {{ deposit_date }}
             <small class="text-muted">(deposit day excluded)</small>
+        </p>
+        <p class="mb-1">
+            <strong>Depósito amount:</strong> {{ "{:,.2f}".format(deposito_amount) }}<br>
+            <strong>Total Dinheiro considered:</strong> {{ "{:,.2f}".format(total_cash) }}<br>
+            <strong>Difference:</strong>
+            <span class="{{ diff_class }}">{{ "{:,.2f}".format(diff) }}</span>
         </p>
     </div>
 </div>
@@ -51,7 +60,7 @@
 <!-- Cash table -->
 <div class="card mb-3">
     <div class="card-header">
-        Dinheiro Sales
+        Dinheiro Sales Breakdown
     </div>
     <div class="card-body p-0">
         <table class="table table-sm table-bordered mb-0">
@@ -59,30 +68,43 @@
                 <tr>
                     <th>Date</th>
                     <th class="amount">Dinheiro</th>
+                    <th class="amount">Running Total</th>
                 </tr>
             </thead>
             <tbody>
+                {% set running_total = 0 %}
                 {% for row in cash_rows %}
-                <tr>
-                    <td>{{ row.sale_date }}</td>
-                    <td class="amount">{{ "{:,.2f}".format(row.amount) }}</td>
-                </tr>
+                    {% set running_total = running_total + row.amount %}
+                    <tr>
+                        <td>{{ row.sale_date }}</td>
+                        <td class="amount">{{ "{:,.2f}".format(row.amount) }}</td>
+                        <td class="amount running-total
+                            {% if running_total > deposito_amount %}
+                                diff-negative
+                            {% elif running_total < deposito_amount %}
+                                diff-positive
+                            {% endif %}
+                        ">
+                            {{ "{:,.2f}".format(running_total) }}
+                        </td>
+                    </tr>
                 {% endfor %}
             </tbody>
             <tfoot class="table-light fw-bold">
                 <tr>
                     <td>Total Dinheiro</td>
+                    <td class="amount"></td>
                     <td class="amount">{{ "{:,.2f}".format(total_cash) }}</td>
                 </tr>
                 <tr>
                     <td>Depósito</td>
+                    <td class="amount"></td>
                     <td class="amount">{{ "{:,.2f}".format(deposito_amount) }}</td>
                 </tr>
                 <tr>
                     <td>Difference</td>
-                    <td class="amount {{ diff_class }}">
-                        {{ "{:,.2f}".format(diff) }}
-                    </td>
+                    <td class="amount"></td>
+                    <td class="amount {{ diff_class }}">{{ "{:,.2f}".format(diff) }}</td>
                 </tr>
             </tfoot>
         </table>

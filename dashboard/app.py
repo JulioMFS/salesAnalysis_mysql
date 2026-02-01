@@ -292,9 +292,9 @@ def sales_vs_deposits():
                payment_method,
                SUM(amount) AS amount
         FROM sales
-        WHERE DATE(sale_date) BETWEEN %s AND %s
+        WHERE DATE(sale_date) <= %s
         GROUP BY DATE(sale_date), payment_method
-    """, (start_date, end_date), fetch=True)
+    """, (end_date,), fetch=True)
 
     sales_df = pd.DataFrame(sales, columns=["sale_date", "payment_method", "amount"])
     if sales_df.empty:
@@ -306,14 +306,37 @@ def sales_vs_deposits():
                description,
                amount
         FROM bank_transactions
-        WHERE transaction_type='credit'
+        WHERE transaction_type = 'credit'
           AND (description LIKE '%POS VENDAS%' OR description LIKE '%DEPOSITO%')
-          AND DATE(transaction_date) BETWEEN %s AND %s
-    """, (start_date, end_date), fetch=True)
+          AND DATE(transaction_date) <= %s
+    """, (end_date,), fetch=True)
 
     bank_df = pd.DataFrame(bank, columns=["transaction_date", "description", "amount"])
     if bank_df.empty:
         bank_df = pd.DataFrame(columns=["transaction_date", "description", "amount"])
+
+    # ---------------- FIND PREVIOUS DEPOSITO ----------------
+    prev_dep_series = bank_df[
+        (bank_df.description.str.contains("DEPOSITO", na=False)) &
+        (bank_df.transaction_date < start_date)
+    ]["transaction_date"]
+
+    prev_deposit_date = prev_dep_series.max() if not prev_dep_series.empty else date(1900, 1 ,1)
+
+    # ---------------- PRELOAD CASH ACCUMULATOR ----------------
+    if prev_deposit_date:
+        preload_cash_df = sales_df[
+            (sales_df.payment_method == "Dinheiro") &
+            (sales_df.sale_date >= prev_deposit_date) &
+            (sales_df.sale_date < start_date)
+        ]
+    else:
+        preload_cash_df = sales_df[
+            (sales_df.payment_method == "Dinheiro") &
+            (sales_df.sale_date < start_date)
+        ]
+
+    cash_accumulator = Decimal(preload_cash_df["amount"].sum() or 0)
 
     # ---------------- DAILY GRID ----------------
     all_dates = pd.date_range(start_date, end_date)
@@ -321,41 +344,79 @@ def sales_vs_deposits():
 
     card_balance = Decimal("0.00")
     cash_balance = Decimal("0.00")
-    cash_accumulator = Decimal("0.00")
+    first_deposit_seen = False
 
     for d in all_dates:
         d = d.date()
 
         # ---- SALES ----
         day_sales = sales_df[sales_df.sale_date == d]
-        card = Decimal(day_sales.loc[day_sales.payment_method == "Cartão Débito", "amount"].sum() or 0)
-        cash = Decimal(day_sales.loc[day_sales.payment_method == "Dinheiro", "amount"].sum() or 0)
+
+        card = Decimal(
+            day_sales.loc[
+                day_sales.payment_method == "Cartão Débito", "amount"
+            ].sum() or 0
+        )
+
+        cash = Decimal(
+            day_sales.loc[
+                day_sales.payment_method == "Dinheiro", "amount"
+            ].sum() or 0
+        )
+
         total_sales = card + cash
 
         # ---- BANK ----
         day_bank = bank_df[bank_df.transaction_date == d]
-        pos = Decimal(day_bank.loc[day_bank.description.str.contains("POS VENDAS", na=False), "amount"].sum() or 0)
-        deposit = Decimal(day_bank.loc[day_bank.description.str.contains("DEPOSITO", na=False), "amount"].sum() or 0)
+
+        pos = Decimal(
+            day_bank.loc[
+                day_bank.description.str.contains("POS VENDAS", na=False), "amount"
+            ].sum() or 0
+        )
+
+        deposit = Decimal(
+            day_bank.loc[
+                day_bank.description.str.contains("DEPOSITO", na=False), "amount"
+            ].sum() or 0
+        )
 
         # ---- CARD ----
         card_diff = card - pos
         card_balance += card_diff
 
-        # ---- CASH ----
+        # ---- CASH (MATCHES deposit_breakdown EXACTLY) ----
         cash_diff = None
+        cash_before_deposit = None
+        deposit_note = None
 
         if deposit > 0:
-            # Deposit reconciles cash from previous deposit day (inclusive)
-            # up to yesterday
+            # Deposit closes cash cycle up to YESTERDAY
+            cash_before_deposit = cash_accumulator
             cash_diff = deposit - cash_accumulator
             cash_balance += cash_diff
 
-            # Reset for new cycle
+            # Reset cycle
             cash_accumulator = Decimal("0.00")
 
-        # Add today's cash AFTER deposit handling
-        # (today belongs to NEXT deposit cycle)
+            if not first_deposit_seen:
+                deposit_note = (
+                    f"Inclui dinheiro desde depósito anterior ({prev_deposit_date})"
+                    if prev_deposit_date
+                    else "Inclui dinheiro desde início dos registos"
+                )
+                first_deposit_seen = True
+
+        # Today's cash ALWAYS belongs to next cycle
         cash_accumulator += cash
+
+        if not first_deposit_seen:
+                deposit_note = (
+                    f"Inclui dinheiro desde depósito anterior ({prev_deposit_date})"
+                    if prev_deposit_date
+                    else "Inclui dinheiro desde início dos registos"
+                )
+                first_deposit_seen = True
 
         total_diff = card_diff + (cash_diff if cash_diff is not None else Decimal("0.00"))
 
@@ -372,6 +433,8 @@ def sales_vs_deposits():
             "diff_total": total_diff,
             "card_balance": card_balance,
             "cash_balance": cash_balance,
+            "cash_before_deposit": cash_before_deposit,
+            "deposit_note": deposit_note,
         })
 
     # ---------------- TOTALS ----------------
@@ -394,7 +457,6 @@ def sales_vs_deposits():
         end_date=end_date,
         all_periods=all_periods
     )
-
 
 # --- Helper function to build period dictionary ---
 def build_period(sales_rows, deposits_rows, start_date, end_date):
@@ -592,9 +654,9 @@ def deposit_breakdown():
 
     deposit_date = pd.to_datetime(deposit_date_param).date()
 
-    start_date = pd.to_datetime(start_date_param).date() if start_date_param else None
+    start_date = pd.to_datetime(start_date_param).date() if start_date_param else date(1900, 1, 1)
     end_date = pd.to_datetime(end_date_param).date() if end_date_param else None
-
+    start_date1 = start_date - timedelta(days=8)
     # Fetch bank transactions
     deposits = execute_query(
         "SELECT transaction_date, description, amount "
@@ -602,7 +664,7 @@ def deposit_breakdown():
         "WHERE transaction_type='credit' "
         " AND DATE(transaction_date) BETWEEN %s AND %s"
         "ORDER BY transaction_date",
-        [start_date, end_date],
+        [start_date1, end_date],
         fetch=True
     )
 
@@ -627,9 +689,7 @@ def deposit_breakdown():
     deposito_date = deposito_row['transaction_date'].iloc[0]
     deposito_amount = float(deposito_row['amount'].iloc[0])
 
-    deposito_amount = float(deposito_row['amount'].iloc[0])
-
-    # Find previous depósito
+     # Find previous depósito
     previous_deposito_date = df[
         (df['description'] == 'DEPOSITO ') &
         (df['transaction_date'] < deposit_date)
