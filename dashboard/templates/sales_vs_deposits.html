@@ -92,11 +92,12 @@
                     <th class="text-end">Diferença</th>
                     <th class="text-end">Saldo</th>
 
+                    <th>Dia</th>
                     <th class="text-end">Dinheiro</th>
                     <th class="text-end">Depósito</th>
                     <th class="text-end">Diferença</th>
                     <th class="text-end">Saldo</th>
-                    <th>Dia</th>
+
                 </tr>
             </thead>
 
@@ -106,7 +107,7 @@
 
                     <!-- CARTÕES -->
                     <td>{{ row.date }}</td>
-                    <td>{{ row.day_name }}</td>
+                    <td style="text-align:right;">{{ row.day_name }}</td>
 
                     <td class="text-end">{{ "{:,.2f}".format(row.sales_card) }}</td>
 
@@ -130,29 +131,30 @@
                     </td>
 
                     <!-- DINHEIRO -->
+                    <td style="text-align:right;">{{ row.day_name }}</td>
                     <td class="text-end bg-warning">
                         {{ "{:,.2f}".format(row.sales_cash) }}
                     </td>
 
                     <td class="text-end bg-warning">
-                    {% if row.bank_deposit %}
-                        <a href="{{ url_for(
-                            'deposit_breakdown',
-                            deposit_date=row.date,
-                            start_date=start_date,
-                            end_date=end_date
-                        ) }}"
-                           title="{% if row.cash_before_deposit is not none %}Cash considered: {{ '{:,.2f}'.format(row.cash_before_deposit) }}{% endif %}">
-                            {{ "{:,.2f}".format(row.bank_deposit) }}
-                        </a>
+                        {% if row.bank_deposit %}
+                            <a href="{{ url_for(
+                                'deposit_breakdown',
+                                deposit_date=row.date,
+                                start_date=start_date,
+                                end_date=end_date
+                            ) }}"
+                               title="{% if row.cash_before_deposit is not none %}Cash considered: {{ '{:,.2f}'.format(row.cash_before_deposit) }}{% endif %}">
+                                {{ "{:,.2f}".format(row.bank_deposit) }}
+                            </a>
 
-                        {% if row.deposit_note %}
-                            <div class="deposit-note">
-                                ℹ️ {{ row.deposit_note }}
-                            </div>
+                            {% if row.deposit_note %}
+                                <div class="deposit-note">
+                                    ℹ️ {{ row.deposit_note }}
+                                </div>
+                            {% endif %}
                         {% endif %}
-                    {% endif %}
-                </td>
+                    </td>
 
 
                     <td class="text-end
@@ -170,7 +172,7 @@
                         {{ "{:,.2f}".format(row.cash_balance) }}
                     </td>
 
-                    <td>{{ row.day_name }}</td>
+
                 </tr>
             {% endfor %}
             </tbody>

@@ -382,7 +382,7 @@ def sales_vs_deposits():
         )
 
         # ---- CARD ----
-        card_diff = card - pos
+        card_diff = pos - card
         card_balance += card_diff
 
         # ---- CASH (MATCHES deposit_breakdown EXACTLY) ----
