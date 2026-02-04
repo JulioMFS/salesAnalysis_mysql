@@ -4,81 +4,128 @@
     <title>Expenses vs Sales</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
     <style>
-        body { font-size: 0.8rem; }
-        .row-line { border-bottom: 1px solid #eee; cursor: pointer; }
-        .category { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+         body { font-size: 0.8rem; }
+
+        .row-line {
+            border-bottom: 1px solid #eee;
+        }
+
+        .category {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .muted { color: #6c757d; }
         .row-header { font-weight: 600; }
         .col-percent { cursor: pointer; }
+
+        /* ---------- CLICKABLE CATEGORY ROWS ---------- */
+        .category-row {
+            cursor: pointer;
+            position: relative;          /* REQUIRED for ::after */
+            transition: background-color 0.15s ease;
+        }
+
+        /* Default arrow indicator */
+        .category-row::after {
+            content: "⤢";
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #bbb;
+            font-size: 0.7rem;
+        }
+
+        /* Hover highlight */
+        .category-row:hover {
+            background-color: #eef5ff;
+        }
+
+        /* Hover hint */
+        .category-row:hover::after {
+            content: "Click: chart · Double-click: details";
+            color: #666;
+            font-size: 0.7rem;
+        }
     </style>
 </head>
+
 <body class="container mt-3">
 
 <a href="javascript:history.back()" class="btn btn-sm btn-secondary mb-2">← Back</a>
 
 <div class="top-bar mb-2">
-  <form method="POST" action="{{ url_for('expenses_vs_sales') }}" class="top-bar-form d-flex gap-2 flex-wrap align-items-center">
-    <div class="field-group">
-      <label for="start_date">Start Date:</label>
-      <input type="date" id="start_date" name="start_date" value="{{ start_date }}" required>
+<form method="POST" action="{{ url_for('expenses_vs_sales') }}"
+      class="top-bar-form d-flex gap-2 flex-wrap align-items-center">
+
+    <div>
+        <label>Start Date</label>
+        <input type="date" id="start_date" name="start_date" value="{{ start_date }}" required>
     </div>
-    <div class="field-group">
-      <label for="end_date">End Date:</label>
-      <input type="date" id="end_date" name="end_date" value="{{ end_date }}" required>
+
+    <div>
+        <label>End Date</label>
+        <input type="date" id="end_date" name="end_date" value="{{ end_date }}" required>
     </div>
-    <div class="field-group">
-      <label for="view">View:</label>
-      <select name="view" id="view">
-        <option value="monthly" {% if view=='monthly' %}selected{% endif %}>Monthly</option>
-        <option value="weekly" {% if view=='weekly' %}selected{% endif %}>Weekly</option>
-        <option value="daily" {% if view=='daily' %}selected{% endif %}>Daily</option>
-      </select>
+
+    <div>
+        <label>View</label>
+        <select name="view" id="view">
+            <option value="monthly" {% if view=='monthly' %}selected{% endif %}>Monthly</option>
+            <option value="weekly" {% if view=='weekly' %}selected{% endif %}>Weekly</option>
+            <option value="daily" {% if view=='daily' %}selected{% endif %}>Daily</option>
+        </select>
     </div>
-    <button type="submit" class="btn btn-primary mt-2">Apply</button>
-  </form>
+
+    <button class="btn btn-primary btn-sm">Apply</button>
+</form>
 </div>
 
 <h6>Expenses vs Sales — {{ view.title() }}</h6>
 
-<div id="expenses-chart" style="width:100%; height:400px;"></div>
+<div id="expenses-chart" style="height:400px"></div>
 
-<!-- Header -->
+<!-- HEADER -->
 <div class="row fw-bold row-line row-header pb-1 mb-1">
     <div class="col-5">Category</div>
     <div class="col-2 text-end">Tx</div>
     <div class="col-3 text-end">Amount</div>
-    <div class="col-2 text-end col-percent" id="percentHeader" title="Click to sort by percentage">%</div>
+    <div class="col-2 text-end col-percent" id="percentHeader">%</div>
 </div>
 
-<!-- Category rows -->
+<!-- CATEGORY ROWS -->
 <div id="category-rows">
 {% for c in categories %}
 <div class="row row-line py-1 category-row"
      data-category="{{ c.category }}"
-     data-percent="{{ c.percent }}">
+     data-percent="{{ c.percent }}"
+     title="Click to filter chart • Double-click for transactions">
     <div class="col-5 category">{{ c.category }}</div>
     <div class="col-2 text-end muted">{{ c.tx_count }}</div>
     <div class="col-3 text-end">{{ "{:,.2f}".format(c.total_amount) }}</div>
     <div class="col-2 text-end">
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex gap-2 align-items-center">
             <div class="progress flex-grow-1" style="height:6px;">
-                <div class="progress-bar" title="{{ '{:,.2f}'.format(c.total_amount) }} ({{ '%.1f'|format(c.percent) }}%)"
-                     style="width: {{ c.percent }}%;
-                            background-color:
-                            {% if c.percent >= 50 %}#dc3545
-                            {% elif c.percent >= 25 %}#fd7e14
-                            {% else %}#198754
-                            {% endif %};"></div>
+                <div class="progress-bar"
+                     style="width:{{ c.percent }}%;
+                     background-color:
+                        {% if c.percent >= 50 %}#dc3545
+                        {% elif c.percent >= 25 %}#fd7e14
+                        {% else %}#198754{% endif %}">
+                </div>
             </div>
-            <small class="text-muted">{{ '%.1f'|format(c.percent) }}%</small>
+            <small class="muted">{{ '%.1f'|format(c.percent) }}%</small>
         </div>
     </div>
 </div>
 {% endfor %}
 </div>
 
-<!-- Footer -->
+<!-- FOOTER -->
 <div class="row fw-bold pt-2 row-line row-footer">
     <div class="col-5">Total</div>
     <div class="col-2 text-end muted">{{ total_tx }}</div>
@@ -87,156 +134,138 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
 let transactions = {{ transactions_json|safe }};
 let chartData = {{ chart_json|safe }};
 let activeCategory = null;
 let percentSortAsc = false;
+let clickTimer = null;
 
-// ---------- Render chart ----------
-function renderChart(filteredCategory=null){
+/* ---------- CHART ---------- */
+function renderChart(category=null){
     let traces;
-
-    if(filteredCategory){
-        const filtered = chartData.filter(d => d.category === filteredCategory);
+    if(category){
+        const f = chartData.filter(d => d.category === category);
         traces = [{
-            x: filtered.map(d=>d.period),
-            y: filtered.map(d=>-d.amount),
-            type: 'bar',
-            name: filteredCategory
+            x: f.map(d=>d.period),
+            y: f.map(d=>-d.amount),
+            type:'bar',
+            name: category
         }];
     } else {
         traces = [
-            {
-                x: chartData.map(d => d.period),
-                y: chartData.map(d => -d.expenses),
-                type: 'bar',
-                name: 'Expenses',
-                marker: { color: '#dc3545' }
-            },
-            {
-                x: chartData.map(d => d.period),
-                y: chartData.map(d => d.sales),
-                type: 'bar',
-                name: 'Sales',
-                marker: { color: '#0d6efd' }
-            },
-            {
-                x: chartData.map(d => d.period),
-                y: chartData.map(d => d.net),
-                type: 'scatter',
-                mode: 'lines+markers',
-                name: 'Net',
-                yaxis: 'y2',               // 👈 SECOND AXIS
-                line: { color: '#198754', width: 2 },
-                marker: { size: 6 }
-            }
+            { x:chartData.map(d=>d.period), y:chartData.map(d=>-d.expenses), type:'bar', name:'Expenses' },
+            { x:chartData.map(d=>d.period), y:chartData.map(d=>d.sales), type:'bar', name:'Sales' },
+            { x:chartData.map(d=>d.period), y:chartData.map(d=>d.net),
+              type:'scatter', mode:'lines+markers', name:'Net', yaxis:'y2' }
         ];
     }
 
-    const layout = {
-        barmode: 'group',
-        margin: { t: 40, l: 60, r: 60, b: 50 },
-
-        yaxis: {
-            title: 'Sales / Expenses',
-            zeroline: true
-        },
-
-        yaxis2: {
-            title: 'Net',
-            overlaying: 'y',
-            side: 'right',
-            showgrid: false
-        }
-    };
-
-    Plotly.react('expenses-chart', traces, layout, { responsive: true });
+    Plotly.react('expenses-chart', traces, {
+        barmode:'group',
+        yaxis:{ title:'Sales / Expenses' },
+        yaxis2:{ overlaying:'y', side:'right', showgrid:false }
+    }, {responsive:true});
 }
 
-
-
-// ---------- Row click (filter chart) ----------
+/* ---------- CLICK vs DBLCLICK ---------- */
 document.getElementById('category-rows').addEventListener('click', e=>{
-    let row = e.target.closest('.category-row');
+    const row = e.target.closest('.category-row');
     if(!row) return;
-    const category = row.dataset.category;
-    if(activeCategory === category) {
-        activeCategory = null;
-        renderChart();
-    } else {
-        activeCategory = category;
-        renderChart(category);
-    }
+
+    clickTimer = setTimeout(()=>{
+        const c = row.dataset.category;
+        activeCategory = activeCategory === c ? null : c;
+        renderChart(activeCategory);
+    }, 250);
 });
 
-// ---------- Percent sort ----------
-document.getElementById('percentHeader').addEventListener('click', ()=>{
-    const container = document.getElementById('category-rows');
-    const rows = Array.from(container.querySelectorAll('.category-row'));
+document.getElementById('category-rows').addEventListener('dblclick', e=>{
+    clearTimeout(clickTimer);
+    const row = e.target.closest('.category-row');
+    if(row) showTransactionsModal(row.dataset.category);
+});
+
+/* ---------- SORT ---------- */
+document.getElementById('percentHeader').onclick = ()=>{
+    const c = document.getElementById('category-rows');
+    const rows = [...c.children];
     rows.sort((a,b)=>{
-        const pa = parseFloat(a.dataset.percent);
-        const pb = parseFloat(b.dataset.percent);
-        return percentSortAsc ? pa - pb : pb - pa;
+        return percentSortAsc
+            ? a.dataset.percent - b.dataset.percent
+            : b.dataset.percent - a.dataset.percent;
     });
     percentSortAsc = !percentSortAsc;
-    rows.forEach(r => container.appendChild(r));
-});
+    rows.forEach(r=>c.appendChild(r));
+};
 
-// ---------- AJAX refresh ----------
-function updateDashboard(){
-    const form = document.querySelector('.top-bar-form');
-    const data = new FormData(form);
-
-    fetch('{{ url_for("expenses_vs_sales_data") }}', {method:'POST', body:data})
-    .then(res=>res.json())
-    .then(json=>{
-        transactions = json.transactions_json;
-        chartData = json.chart_json;
-
-        // Rebuild rows
-        const container = document.getElementById('category-rows');
-        container.innerHTML = '';
-        json.categories.forEach(c=>{
-            const row = document.createElement('div');
-            row.className='row row-line py-1 category-row';
-            row.dataset.category = c.category;
-            row.dataset.percent = c.percent;
-            row.innerHTML = `
-                <div class="col-5 category">${c.category}</div>
-                <div class="col-2 text-end muted">${c.tx_count}</div>
-                <div class="col-3 text-end">${c.total_amount.toLocaleString(undefined,{minimumFractionDigits:2})}</div>
-                <div class="col-2 text-end">
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="progress flex-grow-1" style="height:6px;">
-                            <div class="progress-bar"
-                                 title="${c.total_amount.toLocaleString(undefined,{minimumFractionDigits:2})} (${c.percent.toFixed(1)}%)"
-                                 style="width:${c.percent}%; background-color:${c.percent>=50?'#dc3545':c.percent>=25?'#fd7e14':'#198754'};">
-                            </div>
-                        </div>
-                        <small class="text-muted">${c.percent.toFixed(1)}%</small>
-                    </div>
-                </div>
-            `;
-            container.appendChild(row);
-        });
-
-        // Footer
-        document.querySelector('.row-footer .col-3').innerText =
-            json.total_amount.toLocaleString(undefined,{minimumFractionDigits:2});
-        document.querySelector('.row-footer .col-2.muted').innerText = json.total_tx;
-
-        // Restore chart filter if active
+/* ---------- AJAX REFRESH ---------- */
+document.querySelectorAll('.top-bar-form input, .top-bar-form select')
+.forEach(el=>el.onchange = ()=>{
+    fetch('{{ url_for("expenses_vs_sales_data") }}',{
+        method:'POST', body:new FormData(document.querySelector('.top-bar-form'))
+    })
+    .then(r=>r.json())
+    .then(j=>{
+        transactions = j.transactions_json;
+        chartData = j.chart_json;
         renderChart(activeCategory);
     });
-}
+});
 
-// Attach AJAX triggers
-document.querySelectorAll('.top-bar-form input, .top-bar-form select')
-    .forEach(el=>el.addEventListener('change', updateDashboard));
-
-// Initial render
 renderChart();
+</script>
+
+<!-- ================= MODAL ================= -->
+<div class="modal fade" id="txModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="txModalTitle"></h5>
+            <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+            <table class="table table-sm">
+                <thead>
+                    <tr><th>Date</th><th>Description</th><th class="text-end">Amount</th></tr>
+                </thead>
+            <tbody id="txModalBody"></tbody>
+            <tfoot>
+                <tr class="fw-bold">
+                    <td colspan="2">Total</td>
+                    <td class="text-end" id="txModalTotal"></td>
+                </tr>
+            </tfoot>
+            </table>
+        </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const txModal = new bootstrap.Modal(document.getElementById('txModal'));
+
+function showTransactionsModal(category){
+    document.getElementById('txModalTitle').innerText = `Transactions – ${category}`;
+    const body = document.getElementById('txModalBody');
+    const totalCell = document.getElementById('txModalTotal');
+    body.innerHTML='';
+    let total=0;
+
+    transactions.filter(t=>t.category===category).forEach(t=>{
+        total+=Number(t.amount);
+        body.insertAdjacentHTML('beforeend',`
+        <tr>
+            <td>${t.date}</td>
+            <td>${t.description}</td>
+            <td class="text-end">${Number(t.amount).toLocaleString(undefined,{minimumFractionDigits:2})}</td>
+        </tr>`);
+    });
+
+    totalCell.innerText = total.toLocaleString(undefined,{minimumFractionDigits:2});
+    txModal.show();
+}
 </script>
 
 </body>

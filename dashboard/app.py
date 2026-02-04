@@ -1,13 +1,12 @@
 import json
 from db import get_connection
 from flask import Flask, render_template, request, redirect, url_for, flash, abort
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from db import execute_query
 import pandas as pd
 import os
 from decimal import Decimal
 from flask import jsonify, request
-from datetime import date
 import subprocess
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -162,8 +161,8 @@ def expenses():
 # ---------------- EXPENSES VS SALES ----------------
 @app.route('/expenses_vs_sales', methods=['GET', 'POST'])
 def expenses_vs_sales():
-    today = datetime.today().date()
-    default_start = datetime(today.year - 1, 1, 1).date()
+    today = date.today()
+    default_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
     default_end = today
 
     # --- Form inputs ---
@@ -302,13 +301,13 @@ def sales_vs_deposits():
 
     # ---------------- BANK ----------------
     bank = execute_query("""
-        SELECT DATE(transaction_date) AS transaction_date,
+        SELECT DATE(movement_date) AS transaction_date,
                description,
                amount
         FROM bank_transactions
         WHERE transaction_type = 'credit'
           AND (description LIKE '%POS VENDAS%' OR description LIKE '%DEPOSITO%')
-          AND DATE(transaction_date) <= %s
+          AND DATE(movement_date) <= %s
     """, (end_date,), fetch=True)
 
     bank_df = pd.DataFrame(bank, columns=["transaction_date", "description", "amount"])
