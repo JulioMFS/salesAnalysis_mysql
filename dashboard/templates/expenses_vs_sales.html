@@ -55,8 +55,15 @@
 </head>
 
 <body class="container mt-3">
+<div class="d-flex mb-2">
+  <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary">
+    ← Back
+  </a>
 
-<a href="javascript:history.back()" class="btn btn-sm btn-secondary mb-2">← Back</a>
+  <a href="/" class="btn btn-sm btn-dark ms-auto">
+    🏠 Dashboard
+  </a>
+</div>
 
 <div class="top-bar mb-2">
 <form method="POST" action="{{ url_for('expenses_vs_sales') }}"
@@ -154,13 +161,35 @@ function renderChart(category=null){
             name: category
         }];
     } else {
+        const periods  = chartData.map(d => d.period);
+        const expenses = chartData.map(d => d.expenses); // ← POSITIVE
+        const sales    = chartData.map(d => d.sales);
+        const net      = chartData.map(d => d.net);
+
         traces = [
-            { x:chartData.map(d=>d.period), y:chartData.map(d=>-d.expenses), type:'bar', name:'Expenses' },
-            { x:chartData.map(d=>d.period), y:chartData.map(d=>d.sales), type:'bar', name:'Sales' },
-            { x:chartData.map(d=>d.period), y:chartData.map(d=>d.net),
-              type:'scatter', mode:'lines+markers', name:'Net', yaxis:'y2' }
+            {
+                x: periods,
+                y: expenses,
+                type: 'bar',
+                name: 'Expenses'
+            },
+            {
+                x: periods,
+                y: sales,
+                type: 'bar',
+                name: 'Sales'
+            },
+            {
+                x: periods,
+                y: net,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Net',
+                yaxis: 'y2'
+            }
         ];
     }
+
 
     Plotly.react('expenses-chart', traces, {
         barmode:'group',

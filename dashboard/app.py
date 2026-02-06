@@ -178,60 +178,79 @@ def expenses_vs_sales():
     start_date = datetime.strptime(start_str, "%Y-%m-%d").date()
     end_date = datetime.strptime(end_str, "%Y-%m-%d").date()
 
-    # --- Fetch categories & transactions like drilldown ---
+    # ------------------------------------------------------------------
+    # CATEGORIES (EXPENSES ONLY — POSITIVE, CONSISTENT WITH CHART)
+    # ------------------------------------------------------------------
     categories = execute_query(
         """
         SELECT 
             COALESCE(c.category,'Unclassified') AS category,
             COUNT(*) AS tx_count,
-            SUM(t.amount) AS total_amount
+            SUM(ABS(t.amount)) AS total_amount
         FROM bank_transactions t
         LEFT JOIN debit_classifications c
-            ON t.description LIKE CONCAT('%', c.description_pattern, '%')
-        WHERE t.transaction_type='debit'
+          ON c.id = (
+              SELECT dc.id
+              FROM debit_classifications dc
+              WHERE t.description LIKE CONCAT('%', dc.description_pattern, '%')
+              ORDER BY dc.priority ASC, LENGTH(dc.description_pattern) DESC
+              LIMIT 1
+          )
+
+        WHERE t.transaction_type = 'debit'
           AND DATE(t.transaction_date) BETWEEN %s AND %s
         GROUP BY category
-        ORDER BY total_amount ASC
+        ORDER BY total_amount DESC
         """,
         [start_date, end_date],
         fetch=True
     )
 
-    total_amount = sum(c['total_amount'] for c in categories) if categories else 0
+    total_expenses = sum(c['total_amount'] for c in categories) if categories else 0
     total_tx = sum(c['tx_count'] for c in categories) if categories else 0
-    for c in categories:
-        c['percent'] = (c['total_amount'] / total_amount * 100) if total_amount else 0
 
-    # --- Fetch transactions for modal/JS ---
+    for c in categories:
+        c['percent'] = (c['total_amount'] / total_expenses * 100) if total_expenses else 0
+
+    # ------------------------------------------------------------------
+    # TRANSACTIONS (FOR MODAL)
+    # ------------------------------------------------------------------
     transactions = execute_query(
         """
         SELECT 
             t.transaction_date AS date,
             t.description,
-            t.amount,
+            ABS(t.amount) AS amount,
             COALESCE(c.category,'Unclassified') AS category
         FROM bank_transactions t
         LEFT JOIN debit_classifications c
-            ON t.description LIKE CONCAT('%', c.description_pattern, '%')
-        WHERE t.transaction_type='debit'
+          ON c.id = (
+              SELECT dc.id
+              FROM debit_classifications dc
+              WHERE t.description LIKE CONCAT('%', dc.description_pattern, '%')
+              ORDER BY dc.priority ASC, LENGTH(dc.description_pattern) DESC
+              LIMIT 1
+          )
+
+        WHERE t.transaction_type = 'debit'
           AND DATE(t.transaction_date) BETWEEN %s AND %s
         ORDER BY t.transaction_date ASC
         """,
         [start_date, end_date],
         fetch=True
     )
+
     transactions_json = json.dumps(transactions, default=str)
 
-    # --- Totals for table header ---
-    total_sales = sum([c['total_amount'] for c in categories])  # same as total_amount
-    total_expenses = 0  # optional
-    total_net = total_sales - total_expenses
+    # ------------------------------------------------------------------
+    # CHART DATA (CANONICAL SOURCE OF TRUTH)
+    # ------------------------------------------------------------------
     # --- Chart data: Expenses vs Sales (monthly) ---
     chart_rows = execute_query(
         """
         SELECT
             DATE_FORMAT(t.transaction_date, '%Y-%m') AS period,
-            SUM(CASE WHEN t.transaction_type = 'debit'  THEN t.amount ELSE 0 END) AS expenses,
+            SUM(CASE WHEN t.transaction_type = 'debit'  THEN ABS(t.amount) ELSE 0 END) AS expenses,
             SUM(CASE WHEN t.transaction_type = 'credit' THEN t.amount ELSE 0 END) AS sales
         FROM bank_transactions t
         WHERE DATE(t.transaction_date) BETWEEN %s AND %s
@@ -243,21 +262,23 @@ def expenses_vs_sales():
     )
 
     for r in chart_rows:
-        r['net'] = r['sales'] + r['expenses']
+        r['net'] = r['sales'] - r['expenses']
 
     chart_json = json.dumps(chart_rows, default=str)
 
-    # --- Render template ---
+    # ------------------------------------------------------------------
+    # RENDER
+    # ------------------------------------------------------------------
     return render_template(
         'expenses_vs_sales.html',
         start_date=start_date.strftime("%Y-%m-%d"),
         end_date=end_date.strftime("%Y-%m-%d"),
         view=view,
         categories=categories,
-        total_amount=total_amount,
+        total_amount=total_expenses,   # ← matches table + chart
         total_tx=total_tx,
         transactions_json=transactions_json,
-        chart_json=chart_json  # 👈 REQUIRED
+        chart_json=chart_json
     )
 
 
