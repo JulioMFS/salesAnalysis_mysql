@@ -860,6 +860,84 @@ def debit_classifications():
     conn.close()
     return render_template('debit_classifications.html', classifications=rows)
 
+@app.route('/category_evolution', methods=['GET'])
+def category_evolution():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT DISTINCT category
+        FROM debit_classifications
+        WHERE category IS NOT NULL
+        ORDER BY category
+    """)
+    categories = [r['category'] for r in cursor.fetchall()]
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'category_evolution.html',
+        categories=categories
+    )
+
+@app.route('/category_evolution_data', methods=['POST'])
+def category_evolution_data():
+    data = request.form
+    start_date = datetime.strptime(data['start_date'], "%Y-%m-%d").date()
+    end_date = datetime.strptime(data['end_date'], "%Y-%m-%d").date()
+    view = data.get('view', 'monthly')
+    categories = data.getlist('categories[]')
+
+    if not categories:
+        return jsonify({"series": []})
+
+    # --- Time grouping ---
+    if view == "monthly":
+        period_sql = "DATE_FORMAT(t.transaction_date, '%Y-%m-01')"
+    elif view == "weekly":
+        period_sql = "DATE_SUB(DATE(t.transaction_date), INTERVAL WEEKDAY(t.transaction_date) DAY)"
+    else:
+        period_sql = "DATE(t.transaction_date)"
+
+    placeholders = ",".join(["%s"] * len(categories))
+
+    rows = execute_query(
+        f"""
+        SELECT
+            {period_sql} AS period,
+            c.category,
+            SUM(ABS(t.amount)) AS total
+        FROM bank_transactions t
+        JOIN debit_classifications c
+          ON t.description LIKE CONCAT('%', c.description_pattern, '%')
+        WHERE t.transaction_type = 'debit'
+          AND c.category IN ({placeholders})
+          AND DATE(t.transaction_date) BETWEEN %s AND %s
+        GROUP BY period, c.category
+        ORDER BY period
+        """,
+        categories + [start_date, end_date],
+        fetch=True
+    )
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return jsonify({"series": []})
+
+    df['period'] = pd.to_datetime(df['period'])
+
+    # --- Build Plotly series ---
+    series = []
+    for cat in categories:
+        d = df[df.category == cat]
+        series.append({
+            "name": cat,
+            "x": d['period'].dt.strftime('%Y-%m-%d').tolist(),
+            "y": d['total'].tolist()
+        })
+
+    return jsonify({"series": series})
 
 # ----- Add new -----
 

@@ -34,10 +34,9 @@
 <div class="row g-3 mb-3">
     <div class="col-md-6 d-flex">
         <form method="POST" class="flex-fill">
-            <button type="submit" name="action" value="daily_recon"
-                    class="btn btn-warning w-100 py-2 h-100">
-                Run Daily Reconciliation
-            </button>
+            <a href="{{ url_for('category_evolution') }}" class="btn btn-primary">
+                Analyze Expense Categories
+            </a>
         </form>
     </div>
     <div class="col-md-6 d-flex">

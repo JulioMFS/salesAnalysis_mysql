@@ -1,0 +1,28 @@
+<h3>Expense Category Evolution</h3>
+
+<form id="evolutionForm">
+    <input type="date" name="start_date" required>
+    <input type="date" name="end_date" required>
+
+    <select name="view">
+        <option value="monthly">Monthly</option>
+        <option value="weekly">Weekly</option>
+        <option value="daily">Daily</option>
+    </select>
+
+    <select name="categories[]" multiple size="6">
+        {% for c in categories %}
+        <option value="{{ c }}">{{ c }}</option>
+        {% endfor %}
+    </select>
+
+    <button type="submit" class="btn btn-primary">Analyze</button>
+</form>
+<button id="toggleBarMode" class="btn btn-secondary" type="button">
+        Stacked view
+    </button>
+<div id="chart" style="margin-top:20px;"></div>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script src="{{ url_for('static', filename='js/category_evolution.js') }}"
+        nonce="{{ csp_nonce }}"></script>
