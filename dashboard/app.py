@@ -813,7 +813,7 @@ def expenses_vs_sales_data():
 
     if not df_exp.empty:
         df_exp['date'] = pd.to_datetime(df_exp['date'])
-        df_exp['amount'] = df_exp['amount'].astype(float)
+        df_exp['amount'] = df_exp['amount'].astype(float).abs()
     else:
         df_exp = pd.DataFrame(columns=['date','amount'])
 
