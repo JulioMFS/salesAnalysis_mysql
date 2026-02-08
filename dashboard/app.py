@@ -862,6 +862,11 @@ def debit_classifications():
 
 @app.route('/category_evolution', methods=['GET'])
 def category_evolution():
+    today = date.today()
+    first_of_this_month = today.replace(day=1)
+    last_month_end = first_of_this_month - timedelta(days=1)
+    first_of_last_month = last_month_end.replace(day=1)
+
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -877,15 +882,25 @@ def category_evolution():
     conn.close()
 
     return render_template(
-        'category_evolution.html',
-        categories=categories
-    )
+            "category_evolution.html",
+            start_date=first_of_last_month.isoformat(),
+            end_date=today.isoformat(),
+            categories=categories
+        )
 
 @app.route('/category_evolution_data', methods=['POST'])
 def category_evolution_data():
     data = request.form
-    start_date = datetime.strptime(data['start_date'], "%Y-%m-%d").date()
-    end_date = datetime.strptime(data['end_date'], "%Y-%m-%d").date()
+
+    start_date_str = data.get("start_date")
+    end_date_str = data.get("end_date")
+
+    if not start_date_str or not end_date_str:
+        return jsonify({"series": []})
+
+    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+
     view = data.get('view', 'monthly')
     categories = data.getlist('categories[]')
 
