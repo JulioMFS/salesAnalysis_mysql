@@ -6,19 +6,21 @@
     <title>Expense Category Evolution</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
     <style>
         /* Compact adjustments */
         body {
-            font-size: 0.85rem; /* smaller font overall */
+            font-size: 0.65rem; /* smaller font overall */
         }
         .card {
             padding: 1rem; /* reduce card padding */
         }
         .form-label {
-            font-size: 0.85rem;
+            font-size: 0.65rem;
         }
         .btn {
-            font-size: 0.85rem;
+            font-size: 0.65rem;
             padding: 0.25rem 0.5rem;
         }
         #chart {
@@ -33,6 +35,18 @@
         h3 {
             font-size: 1.1rem;
         }
+        input[type="date"] {
+            appearance: auto;
+            -webkit-appearance: auto;
+        }
+        .flatpickr-calendar {
+            font-size: 0.65rem;
+        }
+
+        .flatpickr-day {
+            line-height: 1.4;
+        }
+
     </style>
 </head>
 <body>
@@ -64,13 +78,13 @@
                 <!-- Start Date -->
                 <div class="col-md-3 col-sm-6">
                     <label for="start_date" class="form-label">Start Date</label>
-                    <input type="date" id="start_date" name="start_date" value="{{ start_date }}" required class="form-control form-control-sm">
+                    <input type="text" id="start_date" name="start_date" value="{{ start_date }}" required class="form-control form-control-sm">
                 </div>
 
                 <!-- End Date -->
                 <div class="col-md-3 col-sm-6">
                     <label for="end_date" class="form-label">End Date</label>
-                    <input type="date" id="end_date" name="end_date" value="{{ end_date }}" required class="form-control form-control-sm">
+                    <input type="text" id="end_date" name="end_date" value="{{ end_date }}" required class="form-control form-control-sm">
                 </div>
 
                 <!-- View -->
@@ -86,7 +100,7 @@
                 <!-- Categories -->
                 <div class="col-md-3 col-sm-6">
                     <label for="categories" class="form-label">Categories</label>
-                    <select name="categories[]" id="categories" multiple size="6" class="form-select form-select-sm">
+                    <select name="categories[]" id="categories" multiple size="3" class="form-select form-select-sm">
                         {% for c in categories %}
                         <option value="{{ c }}">{{ c }}</option>
                         {% endfor %}
@@ -117,6 +131,7 @@
 
 <!-- Scripts -->
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="{{ url_for('static', filename='js/category_evolution.js') }}" nonce="{{ csp_nonce }}"></script>
 </body>
 </html>
