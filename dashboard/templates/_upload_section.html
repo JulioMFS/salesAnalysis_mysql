@@ -1,8 +1,7 @@
-<div class="row g-3 mb-3">
+<div class="row g-3 mb-3 align-items-stretch">
+
     <!-- Bank Upload -->
-    <div class="row g-3 mb-3 align-items-stretch">
-    <!-- Bank Upload -->
-    <div class="col-md-6 d-flex flex-column">
+    <div class="col-md-4 d-flex flex-column">
         <div class="d-flex flex-column flex-fill">
             <div id="bankDropZone" class="upload-btn btn btn-primary flex-fill py-3 text-center">
                 <strong>Upload Bank CSVs</strong>
@@ -10,12 +9,12 @@
         </div>
         <input type="file" id="bankUpload" multiple accept=".csv" style="display:none">
         <small class="text-muted mt-1 upload-hint text-center">
-            Only files named <strong>CGD_Conta_Extracto*.csv</strong> are accepted
+            Only files named <strong>CGD_Conta_Extracto*.csv</strong>
         </small>
     </div>
 
     <!-- Sales Upload -->
-    <div class="col-md-6 d-flex flex-column">
+    <div class="col-md-4 d-flex flex-column">
         <div class="d-flex flex-column flex-fill">
             <div id="salesDropZone" class="upload-btn btn btn-success flex-fill py-3 text-center">
                 <strong>Upload Sales Files</strong>
@@ -23,10 +22,25 @@
         </div>
         <input type="file" id="salesUpload" multiple accept=".pdf" style="display:none">
         <small class="text-muted mt-1 upload-hint text-center">
-            Only files named <strong>Vendas*.pdf</strong> are accepted
+            Only files named <strong>Vendas*.pdf</strong>
         </small>
     </div>
+
+    <!-- TPA Upload -->
+    <div class="col-md-4 d-flex flex-column">
+        <div class="d-flex flex-column flex-fill">
+            <div id="tpaDropZone" class="upload-btn btn upload-tpa flex-fill py-3 text-center">
+                <strong>Upload TPA CSVs</strong>
+            </div>
+        </div>
+        <input type="file" id="tpaUpload" multiple accept=".csv" style="display:none">
+        <small class="text-muted mt-1 upload-hint text-center">
+            Files: <strong>Consultar movimentos de TPA*.csv</strong>
+        </small>
+    </div>
+
 </div>
+
 
 </div>
 

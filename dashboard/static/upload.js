@@ -14,6 +14,13 @@ document.addEventListener("DOMContentLoaded", () => {
         filenameRegex: /^Vendas.*\.pdf$/i
     });
 
+     // ✅ TPA uploader
+    setupUploader({
+        dropZoneId: "tpaDropZone",
+        inputId: "tpaUpload",
+        fileType: "tpa",
+        filenameRegex: /^TPA_Consulta_Movimento.*\.csv$/i
+    });
 });
 
 
@@ -127,7 +134,7 @@ function renderReport(data) {
             if (r.status === "ok") {
                 output += `✔ ${r.file} (${r.rows} rows)\n`;
             } else {
-                output += `✖ ${r.file}: ${r.error}\n`;
+                output += `✖ ${r.file}: ${r.message}\n`;
             }
         });
     } else {

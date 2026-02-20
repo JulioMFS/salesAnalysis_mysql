@@ -1,17 +1,18 @@
 import json
 from db import get_connection
-from flask import Flask, render_template, request, redirect, url_for, flash, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, Blueprint, jsonify, current_app
 from datetime import date, datetime, timedelta
 from db import execute_query
 import pandas as pd
 import os
 from decimal import Decimal
-from flask import jsonify, request
 import subprocess
-
+import re
+import mysql.connector
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 from import_csv import import_single_bank_csv
+from import_csv import import_single_tpa_csv
 from import_pdf import import_single_sales_pdf
 
 
@@ -53,6 +54,8 @@ def upload(file_type):
             all_results.append(import_single_bank_csv(file_path))
         elif file_type == "sales":
             all_results.append(import_single_sales_pdf(file_path))
+        elif file_type == "tpa":
+            all_results.append((import_single_tpa_csv(file_path)))
 
     # --- Build summary ---
     def build_import_summary(results):
@@ -1007,6 +1010,108 @@ def delete_classification(id):
     cursor.close()
     conn.close()
     return jsonify({'id': id})
+
+tpa_bp = Blueprint("tpa", __name__)
+
+def fix_number(value):
+    # "1.245\t52" -> 1245.52
+    value = value.replace(".", "")
+    value = value.replace("\t", ".")
+    return float(value)
+
+def fix_tpa(tpa):
+    return re.sub(r"[^0-9]", "", tpa)
+
+def fix_date(date_str):
+    # 01-10-2025 -> 2025-10-01
+    return datetime.strptime(date_str, "%d-%m-%Y").date()
+
+@tpa_bp.route("/upload/tpa", methods=["POST"])
+def upload_tpa():
+    if "files[]" not in request.files:
+        return jsonify({
+            "status": "error",
+            "message": "No files uploaded"
+        }), 400
+
+    files = request.files.getlist("files[]")
+
+    files_ok = 0
+    files_error = 0
+    rows_total = 0
+    results = []
+    min_date = None
+    max_date = None
+
+    db = mysql.connector.connect(
+        host=current_app.config["DB_HOST"],
+        user=current_app.config["DB_USER"],
+        password=current_app.config["DB_PASSWORD"],
+        database=current_app.config["DB_NAME"]
+    )
+    cur = db.cursor()
+
+    for file in files:
+        rows = 0
+        try:
+            content = file.stream.read().decode("utf-8").splitlines()
+
+            for line in content:
+                if not line[:2].isdigit():
+                    continue
+
+                parts = line.split(";")
+
+                data = fix_date(parts[0])
+                tpa = fix_tpa(parts[1])
+                montante = fix_number(parts[4])
+                dc = parts[5].strip()
+                tsc = fix_number(parts[6])
+                mont_liq = fix_number(parts[7])
+
+                cur.execute("""
+                    INSERT INTO tpa_movements
+                    (data, tpa_number, montante, dc, tsc, montante_liquido)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (data, tpa, montante, dc, tsc, mont_liq))
+
+                rows += 1
+                rows_total += 1
+
+                min_date = data if not min_date or data < min_date else min_date
+                max_date = data if not max_date or data > max_date else max_date
+
+            files_ok += 1
+            results.append({
+                "file": file.filename,
+                "status": "ok",
+                "rows": rows
+            })
+
+        except Exception as e:
+            files_error += 1
+            results.append({
+                "file": file.filename,
+                "status": "error",
+                "error": str(e)
+            })
+
+    db.commit()
+    cur.close()
+    db.close()
+
+    return jsonify({
+        "status": "success",
+        "summary": {
+            "files_total": len(files),
+            "files_ok": files_ok,
+            "files_error": files_error,
+            "rows_total": rows_total,
+            "min_date": min_date.isoformat() if min_date else None,
+            "max_date": max_date.isoformat() if max_date else None
+        },
+        "results": results
+    })
 
 
 if __name__ == '__main__':
