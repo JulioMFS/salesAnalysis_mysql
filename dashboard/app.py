@@ -610,27 +610,28 @@ def bank_details():
     )
 
     deposits = execute_query(
-        "SELECT transaction_date, description, amount "
+        "SELECT movement_date, description, amount "
         "FROM bank_transactions "
         "WHERE transaction_type='credit' "
+        " AND description like '%00992577 POS%'"
         "ORDER BY transaction_date",
         fetch=True
     )
 
     deposits_df = pd.DataFrame(
         deposits,
-        columns=['transaction_date', 'description', 'amount']
+        columns=['movement_date', 'description', 'amount']
     )
 
     if not deposits_df.empty:
-        deposits_df['transaction_date'] = pd.to_datetime(
-            deposits_df['transaction_date']
+        deposits_df['movement_date'] = pd.to_datetime(
+            deposits_df['movement_date']
         ).dt.date
         deposits_df['amount'] = deposits_df['amount'].astype(float)
 
     deposito_dates = deposits_df[
         deposits_df['description'] == 'DEPOSITO'
-    ]['transaction_date']
+    ]['movement_date']
 
     prev_deposito_date = (
         deposito_dates[deposito_dates < selected_date].max()
@@ -638,13 +639,13 @@ def bank_details():
     )
 
     filtered_df = deposits_df[
-        (deposits_df['transaction_date'] >= prev_deposito_date) &
-        (deposits_df['transaction_date'] <= selected_date)
+        (deposits_df['movement_date'] >= prev_deposito_date) &
+        (deposits_df['movement_date'] <= selected_date)
     ].copy()
 
     filtered_df = filtered_df[
         filtered_df['description'] != 'DEPOSITO'
-    ].sort_values('transaction_date')
+    ].sort_values('movement_date')
 
     filtered_df['credited_date'] = prev_deposito_date
 
@@ -678,15 +679,21 @@ def deposit_breakdown():
     deposit_date = pd.to_datetime(deposit_date_param).date()
 
     start_date = pd.to_datetime(start_date_param).date() if start_date_param else date(1900, 1, 1)
-    end_date = pd.to_datetime(end_date_param).date() if end_date_param else None
+    end_date = pd.to_datetime(end_date_param).date() if end_date_param else deposit_date
+
+    # Look back far enough to find previous deposit
     start_date1 = start_date - timedelta(days=8)
-    # Fetch bank transactions
+
+    # ---------------- BANK TRANSACTIONS ----------------
+
     deposits = execute_query(
-        "SELECT transaction_date, description, amount "
-        "FROM bank_transactions "
-        "WHERE transaction_type='credit' "
-        " AND DATE(transaction_date) BETWEEN %s AND %s"
-        "ORDER BY transaction_date",
+        """
+        SELECT transaction_date, description, amount
+        FROM bank_transactions
+        WHERE transaction_type = 'credit'
+          AND DATE(transaction_date) BETWEEN %s AND %s
+        ORDER BY transaction_date
+        """,
         [start_date1, end_date],
         fetch=True
     )
@@ -696,61 +703,89 @@ def deposit_breakdown():
         columns=['transaction_date', 'description', 'amount']
     )
 
+    if df.empty:
+        abort(404, "No bank transactions found")
+
     df['transaction_date'] = pd.to_datetime(df['transaction_date']).dt.date
     df['amount'] = df['amount'].astype(float)
 
-    # Get current depósito
-    # Get the depósito that closes this period
-    deposito_row = df[
-        (df['description'] == 'DEPOSITO ') &
-        (df['transaction_date'] >= deposit_date)
-        ].sort_values('transaction_date').head(1)
+    # NORMALIZE DESCRIPTION (CRITICAL FIX)
+    df['description_norm'] = df['description'].str.strip().str.upper()
 
-    if deposito_row.empty:
-        abort(404, f"No DEPOSITO found on or after {deposit_date}")
+    # ---------------- CURRENT DEPÓSITOS (ALL OF THEM) ----------------
 
-    deposito_date = deposito_row['transaction_date'].iloc[0]
-    deposito_amount = float(deposito_row['amount'].iloc[0])
+    depositos_df = df[
+        (df['description_norm'] == 'DEPOSITO') &
+        (df['transaction_date'] == deposit_date)
+    ].sort_values('transaction_date')
 
-     # Find previous depósito
+    if depositos_df.empty:
+        abort(404, f"No DEPOSITO found on {deposit_date}")
+
+    deposito_rows = depositos_df.to_dict(orient='records')
+    deposito_amount = float(depositos_df['amount'].sum())
+
+    # ---------------- PREVIOUS DEPÓSITO (PERIOD START) ----------------
+
     previous_deposito_date = df[
-        (df['description'] == 'DEPOSITO ') &
+        (df['description_norm'] == 'DEPOSITO') &
         (df['transaction_date'] < deposit_date)
     ]['transaction_date'].max()
 
-    # Fetch cash sales (Dinheiro)
+    # ---------------- CASH SALES ----------------
+
     cash_sales = execute_query(
-        "SELECT sale_date, amount "
-        "FROM sales "
-        "WHERE payment_method = 'Dinheiro'",
+        """
+        SELECT sale_date, amount
+        FROM sales
+        WHERE payment_method = 'Dinheiro'
+        """,
         fetch=True
     )
 
     cash_df = pd.DataFrame(cash_sales, columns=['sale_date', 'amount'])
-    cash_df['sale_date'] = pd.to_datetime(cash_df['sale_date']).dt.date
-    cash_df['amount'] = cash_df['amount'].astype(float)
 
-    # Filter cash used for comparison
-    cash_used = cash_df[
-        (cash_df['sale_date'] >= previous_deposito_date) &
-        (cash_df['sale_date'] < deposit_date)
+    if not cash_df.empty:
+        cash_df['sale_date'] = pd.to_datetime(cash_df['sale_date']).dt.date
+        cash_df['amount'] = cash_df['amount'].astype(float)
+    else:
+        cash_df = pd.DataFrame(columns=['sale_date', 'amount'])
+
+    # ---------------- FILTER CASH FOR PERIOD ----------------
+
+    if previous_deposito_date:
+        cash_used = cash_df[
+            (cash_df['sale_date'] >= previous_deposito_date) &
+            (cash_df['sale_date'] < deposit_date)
+        ].sort_values('sale_date')
+    else:
+        cash_used = cash_df[
+            cash_df['sale_date'] < deposit_date
         ].sort_values('sale_date')
 
+    cash_rows = cash_used.to_dict(orient='records')
     total_cash = float(cash_used['amount'].sum())
+
+    # ---------------- DIFFERENCE ----------------
+
     diff = deposito_amount - total_cash
-    if diff is None:
-        diff_class = ""
-    elif diff < 0:
+
+    if diff < 0:
         diff_class = "diff-negative"
-    else:
+    elif diff > 0:
         diff_class = "diff-positive"
+    else:
+        diff_class = ""
+
+    # ---------------- RENDER ----------------
 
     return render_template(
         'deposit_breakdown.html',
         deposit_date=deposit_date,
+        deposito_rows=deposito_rows,
         deposito_amount=deposito_amount,
         previous_deposito_date=previous_deposito_date,
-        cash_rows=cash_used.to_dict(orient='records'),
+        cash_rows=cash_rows,
         total_cash=total_cash,
         diff=diff,
         diff_class=diff_class,
