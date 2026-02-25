@@ -4,82 +4,117 @@ document.addEventListener("DOMContentLoaded", () => {
         dropZoneId: "bankDropZone",
         inputId: "bankUpload",
         fileType: "bank",
-        filenameRegex: /^CGD_Conta_Extracto.*\.csv$/i
+        filenameRegex: /^CGD_Conta_Extracto.*\.csv$/i,
+        errorContainerId: "bankUploadErrors"
     });
 
     setupUploader({
         dropZoneId: "salesDropZone",
         inputId: "salesUpload",
         fileType: "sales",
-        filenameRegex: /^Vendas.*\.pdf$/i
+        filenameRegex: /^Vendas.*\.pdf$/i,
+        errorContainerId: "salesUploadErrors"
     });
 
-     // ✅ TPA uploader
     setupUploader({
         dropZoneId: "tpaDropZone",
         inputId: "tpaUpload",
         fileType: "tpa",
-        filenameRegex: /^TPA_Consulta_Movimento.*\.csv$/i
+        filenameRegex: /^TPA_Consulta_Movimento.*\.csv$/i,
+        errorContainerId: "tpaUploadErrors"
     });
 });
 
-
-function setupUploader({ dropZoneId, inputId, fileType, filenameRegex }) {
+function setupUploader({ dropZoneId, inputId, fileType, filenameRegex, errorContainerId }) {
 
     const dropZone = document.getElementById(dropZoneId);
     const input = document.getElementById(inputId);
+    const errorContainer = errorContainerId ? document.getElementById(errorContainerId) : null;
 
-    // Click -> open file picker
     dropZone.addEventListener("click", () => input.click());
 
-    // Picker selection
     input.addEventListener("change", () => handleFiles(input.files));
 
-    // Drag & drop
     dropZone.addEventListener("dragover", e => {
         e.preventDefault();
         dropZone.classList.add("border", "border-dark");
     });
 
     dropZone.addEventListener("dragleave", () => {
-        dropZone.classList.remove("border", "border-dark");
+        dropZone.classList.remove("border", "border-dark", "border-danger", "bg-danger", "text-white");
+        if (errorContainer) errorContainer.innerHTML = "";
     });
 
     dropZone.addEventListener("drop", e => {
         e.preventDefault();
-        dropZone.classList.remove("border", "border-dark");
+        dropZone.classList.remove("border", "border-dark", "border-danger", "bg-danger", "text-white");
         handleFiles(e.dataTransfer.files);
+    });
+
+    dropZone.addEventListener("dragenter", e => {
+        e.preventDefault();
+        const items = e.dataTransfer.items;
+        let hasInvalid = false;
+        if (items) {
+            for (let i = 0; i < items.length; i++) {
+                const fileName = items[i].getAsFile()?.name || "";
+                if (!filenameRegex.test(fileName)) {
+                    hasInvalid = true;
+                    break;
+                }
+            }
+        }
+        if (hasInvalid) {
+            dropZone.classList.add("border-danger", "bg-danger", "text-white");
+            if (errorContainer) errorContainer.innerHTML = "❌ Invalid file(s) detected!";
+        } else {
+            dropZone.classList.add("border-dark");
+            if (errorContainer) errorContainer.innerHTML = "";
+        }
     });
 
     function handleFiles(files) {
         if (!files.length) return;
 
+        const invalidFiles = [];
+
         for (const f of files) {
             if (!filenameRegex.test(f.name)) {
-                alert(`Invalid filename:\n${f.name}`);
-                return;
+                invalidFiles.push(f.name);
             }
         }
 
+        if (invalidFiles.length > 0) {
+            // Show alert like Sales uploader
+            alert(
+                `Invalid file(s):\n${invalidFiles.join("\n")}\n\n` +
+                `Only ${filenameRegex.toString().replace(/^\/\^|\$\/i$/g, '')} files are allowed.`
+            );
+
+            // Reset input so nothing is uploaded
+            input.value = "";
+
+            // Do NOT update inline error container
+            return; // Stop upload
+        }
+
+        // All files valid → proceed to upload
         uploadFiles(files);
     }
 
     function uploadFiles(files) {
         const formData = new FormData();
-        for (const f of files) {
-            formData.append("files[]", f); // ✅ IMPORTANT
-        }
+        for (const f of files) formData.append("files[]", f);
 
         const xhr = new XMLHttpRequest();
         xhr.open("POST", `/upload/${fileType}`);
-
         xhr.upload.onprogress = updateProgress;
 
         xhr.onload = () => {
             try {
                 const response = JSON.parse(xhr.responseText);
                 renderReport(response);
-            } catch (e) {
+            } catch {
                 alert("Unexpected server response");
             }
             resetProgress();
@@ -94,7 +129,6 @@ function setupUploader({ dropZoneId, inputId, fileType, filenameRegex }) {
         xhr.send(formData);
     }
 }
-
 
 /* ---------- UI helpers ---------- */
 

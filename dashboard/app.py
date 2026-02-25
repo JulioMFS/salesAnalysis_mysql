@@ -290,6 +290,11 @@ def sales_vs_deposits():
     start_date_param = request.args.get('start_date')
     end_date_param = request.args.get('end_date')
 
+    start_date = parse_date_param(start_date_param) or pd.Timestamp.today().date()
+    end_date = parse_date_param(end_date_param) or pd.Timestamp.today().date()
+
+    # Your existing logic for sales vs deposits goes here
+
     today = date.today()
 
     if today.day > 8:
@@ -338,6 +343,17 @@ def sales_vs_deposits():
     if bank_df.empty:
         bank_df = pd.DataFrame(columns=["transaction_date", "description", "amount"])
 
+    tpa = execute_query("""
+        SELECT DATE(data) AS tpa_date,
+               SUM(tsc) AS tsc
+        FROM tpa_movements
+        WHERE DATE(data) <= %s
+        GROUP BY DATE(data)
+    """, (end_date,), fetch=True)
+
+    tpa_df = pd.DataFrame(tpa, columns=["tpa_date", "tsc"])
+    if tpa_df.empty:
+        tpa_df = pd.DataFrame(columns=["tpa_date", "tsc"])
     # ---------------- FIND PREVIOUS DEPOSITO ----------------
     prev_dep_series = bank_df[
         (bank_df.description.str.contains("DEPOSITO", na=False)) &
@@ -443,6 +459,10 @@ def sales_vs_deposits():
 
         total_diff = card_diff + (cash_diff if cash_diff is not None else Decimal("0.00"))
 
+        tsc = Decimal(
+            tpa_df.loc[tpa_df.tpa_date == d, "tsc"].sum() or 0
+        )
+
         rows.append({
             "date": d,
             "day_name": d.strftime("%a"),
@@ -450,6 +470,7 @@ def sales_vs_deposits():
             "sales_cash": cash,
             "sales_total": total_sales,
             "bank_pos": pos,
+            "tsc": tsc,
             "bank_deposit": deposit,
             "diff_card": card_diff,
             "diff_cash": cash_diff,
@@ -587,88 +608,141 @@ def expenses_drilldown():
         view=view
     )
 
+def parse_date_param(param):
+    """
+    Safely parse a date parameter from query string.
+    Handles:
+      - "YYYY-MM-DD"
+      - "YYYY-MM-DD HH:MM:SS"
+      - None (returns None)
+    Returns a Python date object.
+    """
+    if not param:
+        return None
+    return pd.to_datetime(param).date()
+
 @app.route('/bank_details')
 def bank_details():
-
+    # ---------------- PARSE DATES ----------------
     date_param = request.args.get('date')
     start_date_param = request.args.get('start_date')
     end_date_param = request.args.get('end_date')
 
-    selected_date = (
-        pd.to_datetime(date_param).date()
-        if date_param else pd.Timestamp.today().date()
-    )
+    selected_date = parse_date_param(date_param) or pd.Timestamp.today().date()
+    start_date = parse_date_param(start_date_param)
+    end_date = parse_date_param(end_date_param)
 
-    start_date = (
-        pd.to_datetime(start_date_param).date()
-        if start_date_param else None
-    )
-
-    end_date = (
-        pd.to_datetime(end_date_param).date()
-        if end_date_param else None
-    )
-
+    # ---------------- BANK POS CREDITS ----------------
     deposits = execute_query(
-        "SELECT movement_date, description, amount "
-        "FROM bank_transactions "
-        "WHERE transaction_type='credit' "
-        " AND description like '%00992577 POS%'"
-        "ORDER BY transaction_date",
+        """
+        SELECT transaction_date, description, amount
+        FROM bank_transactions
+        WHERE description LIKE '%00992577 POS%'
+        ORDER BY transaction_date
+        """,
         fetch=True
     )
 
-    deposits_df = pd.DataFrame(
-        deposits,
-        columns=['movement_date', 'description', 'amount']
-    )
+    deposits_df = pd.DataFrame(deposits, columns=['transaction_date', 'description', 'amount'])
 
-    if not deposits_df.empty:
-        deposits_df['movement_date'] = pd.to_datetime(
-            deposits_df['movement_date']
-        ).dt.date
-        deposits_df['amount'] = deposits_df['amount'].astype(float)
+    if deposits_df.empty:
+        abort(404, "No bank POS transactions found")
 
-    deposito_dates = deposits_df[
-        deposits_df['description'] == 'DEPOSITO'
-    ]['movement_date']
+    deposits_df['transaction_date'] = pd.to_datetime(deposits_df['transaction_date'])
+    deposits_df['amount'] = deposits_df['amount'].astype(float)
 
+    # ---------------- FIND PREVIOUS DEPÓSITO ----------------
+    deposito_dates = deposits_df.loc[
+        deposits_df['description'].str.upper() == 'DEPOSITO', 'transaction_date'
+    ]
     prev_deposito_date = (
-        deposito_dates[deposito_dates < selected_date].max()
-        if not deposito_dates.empty else selected_date
+        deposito_dates[deposito_dates < pd.Timestamp(selected_date)].max()
+        if not deposito_dates.empty
+        else pd.Timestamp(selected_date)
     )
 
+    # ---------------- FILTER POS TRANSACTIONS ----------------
     filtered_df = deposits_df[
-        (deposits_df['movement_date'] >= prev_deposito_date) &
-        (deposits_df['movement_date'] <= selected_date)
+        (deposits_df['transaction_date'] >= prev_deposito_date) &
+        (deposits_df['transaction_date'] <= pd.Timestamp(selected_date)) &
+        (deposits_df['description'].str.upper() != 'DEPOSITO')
     ].copy()
 
-    filtered_df = filtered_df[
-        filtered_df['description'] != 'DEPOSITO'
-    ].sort_values('movement_date')
+    filtered_df['credited_date'] = selected_date
+    filtered_df['transaction_date_only'] = pd.to_datetime(filtered_df['transaction_date'].dt.date)
 
-    filtered_df['credited_date'] = prev_deposito_date
+    # ---------------- TPA / TSC DATA ----------------
+    tpa_rows = execute_query(
+        """
+        SELECT data, montante_liquido, tsc
+        FROM tpa_movements
+        WHERE DATE(data) BETWEEN %s AND %s
+        """,
+        [prev_deposito_date, selected_date],
+        fetch=True
+    )
 
+    # Handle empty results safely
+    if tpa_rows:
+        tpa_df = pd.DataFrame(tpa_rows)
+        # Rename 'data' to 'transaction_date'
+        if 'data' in tpa_df.columns:
+            tpa_df = tpa_df.rename(columns={'data': 'transaction_date'})
+        tpa_df['transaction_date'] = pd.to_datetime(tpa_df['transaction_date'])
+        tpa_df['transaction_date_only'] = pd.to_datetime(tpa_df['transaction_date'].dt.date)
+        tpa_df[['montante_liquido', 'tsc']] = tpa_df[['montante_liquido', 'tsc']].astype(float)
+    else:
+        tpa_df = pd.DataFrame(columns=['transaction_date', 'montante_liquido', 'tsc', 'transaction_date_only'])
+
+    # ---------------- MATCH TSC PER LINE (closest amount per date) ----------------
+    filtered_df['tsc'] = 0.0
+
+    for date, group in filtered_df.groupby('transaction_date_only'):
+        tpa_candidates = tpa_df[tpa_df['transaction_date_only'] == date]
+        if not tpa_candidates.empty:
+            for idx, row in group.iterrows():
+                # Find TPA row with closest montante_liquido to bank amount
+                closest_idx = (tpa_candidates['montante_liquido'] - row['amount']).abs().idxmin()
+                filtered_df.at[idx, 'tsc'] = tpa_candidates.at[closest_idx, 'tsc']
+
+    # ---------------- CALCULATE TOTALS ----------------
     transactions = filtered_df.to_dict(orient='records')
-    total_credits = float(filtered_df['amount'].sum()) if not filtered_df.empty else 0.0
+    total_credits = float(filtered_df['amount'].sum())
+    total_tsc = float(filtered_df['tsc'].sum())
 
-    total_sales = 0.0
+    # ---------------- TOTAL SALES ----------------
+    sales_rows = execute_query(
+        """
+        SELECT COALESCE(SUM(amount), 0) AS total
+        FROM sales
+        WHERE sale_date BETWEEN %s AND %s
+        AND payment_method LIKE '%Cartão Débito%'
+        """,
+        [prev_deposito_date, selected_date],
+        fetch=True
+    )
+    total_sales = float(sales_rows[0]['total']) if sales_rows else 0.0
+
+    # ---------------- DIFFERENCE ----------------
     total_diff = total_sales - total_credits
+    diff_class = "diff-positive" if total_diff >= 0 else "diff-negative"
 
+    # ---------------- RENDER ----------------
     return render_template(
         'bank_details.html',
         transactions=transactions,
         date=selected_date,
         total_sales=total_sales,
         total_credits=total_credits,
+        total_tsc=total_tsc,
         total_diff=total_diff,
+        diff_class=diff_class,
         start_date=start_date,
         end_date=end_date
     )
 
 @app.route('/deposit_breakdown')
 def deposit_breakdown():
-
     deposit_date_param = request.args.get('deposit_date')
     start_date_param = request.args.get('start_date')
     end_date_param = request.args.get('end_date')
@@ -677,15 +751,11 @@ def deposit_breakdown():
         abort(400, "Missing deposit_date")
 
     deposit_date = pd.to_datetime(deposit_date_param).date()
-
     start_date = pd.to_datetime(start_date_param).date() if start_date_param else date(1900, 1, 1)
     end_date = pd.to_datetime(end_date_param).date() if end_date_param else deposit_date
-
-    # Look back far enough to find previous deposit
     start_date1 = start_date - timedelta(days=8)
 
     # ---------------- BANK TRANSACTIONS ----------------
-
     deposits = execute_query(
         """
         SELECT transaction_date, description, amount
@@ -698,22 +768,16 @@ def deposit_breakdown():
         fetch=True
     )
 
-    df = pd.DataFrame(
-        deposits,
-        columns=['transaction_date', 'description', 'amount']
-    )
+    df = pd.DataFrame(deposits, columns=['transaction_date', 'description', 'amount'])
 
     if df.empty:
         abort(404, "No bank transactions found")
 
     df['transaction_date'] = pd.to_datetime(df['transaction_date']).dt.date
     df['amount'] = df['amount'].astype(float)
-
-    # NORMALIZE DESCRIPTION (CRITICAL FIX)
     df['description_norm'] = df['description'].str.strip().str.upper()
 
-    # ---------------- CURRENT DEPÓSITOS (ALL OF THEM) ----------------
-
+    # ---------------- CURRENT DEPÓSITOS ----------------
     depositos_df = df[
         (df['description_norm'] == 'DEPOSITO') &
         (df['transaction_date'] == deposit_date)
@@ -722,18 +786,45 @@ def deposit_breakdown():
     if depositos_df.empty:
         abort(404, f"No DEPOSITO found on {deposit_date}")
 
+    # ---------------- TPA / TSC DATA ----------------
+    tpa_rows = execute_query(
+        """
+        SELECT data, montante, tsc
+        FROM tpa_movements
+        WHERE DATE(data) = %s
+        """,
+        [deposit_date],
+        fetch=True
+    )
+
+    tpa_df = pd.DataFrame(tpa_rows, columns=['transaction_date', 'amount', 'tsc'])
+    if not tpa_df.empty:
+        tpa_df['transaction_date'] = pd.to_datetime(tpa_df['transaction_date']).dt.date
+        tpa_df[['amount', 'tsc']] = tpa_df[['amount', 'tsc']].astype(float)
+    else:
+        tpa_df = pd.DataFrame(columns=['transaction_date', 'amount', 'tsc'])
+
+    # ---------------- MERGE TSC BY DATE ----------------
+    # Sum TSC per date and merge
+    tpa_sum = tpa_df.groupby('transaction_date', as_index=False)['tsc'].sum()
+    depositos_df = depositos_df.merge(
+        tpa_sum,
+        on='transaction_date',
+        how='left'
+    )
+    depositos_df['tsc'] = depositos_df['tsc'].fillna(0.0)
+
     deposito_rows = depositos_df.to_dict(orient='records')
     deposito_amount = float(depositos_df['amount'].sum())
+    total_tsc = float(depositos_df['tsc'].sum())
 
-    # ---------------- PREVIOUS DEPÓSITO (PERIOD START) ----------------
-
+    # ---------------- PREVIOUS DEPÓSITO ----------------
     previous_deposito_date = df[
         (df['description_norm'] == 'DEPOSITO') &
         (df['transaction_date'] < deposit_date)
     ]['transaction_date'].max()
 
     # ---------------- CASH SALES ----------------
-
     cash_sales = execute_query(
         """
         SELECT sale_date, amount
@@ -742,16 +833,12 @@ def deposit_breakdown():
         """,
         fetch=True
     )
-
     cash_df = pd.DataFrame(cash_sales, columns=['sale_date', 'amount'])
-
     if not cash_df.empty:
         cash_df['sale_date'] = pd.to_datetime(cash_df['sale_date']).dt.date
         cash_df['amount'] = cash_df['amount'].astype(float)
     else:
         cash_df = pd.DataFrame(columns=['sale_date', 'amount'])
-
-    # ---------------- FILTER CASH FOR PERIOD ----------------
 
     if previous_deposito_date:
         cash_used = cash_df[
@@ -759,34 +846,38 @@ def deposit_breakdown():
             (cash_df['sale_date'] < deposit_date)
         ].sort_values('sale_date')
     else:
-        cash_used = cash_df[
-            cash_df['sale_date'] < deposit_date
-        ].sort_values('sale_date')
+        cash_used = cash_df[cash_df['sale_date'] < deposit_date].sort_values('sale_date')
 
     cash_rows = cash_used.to_dict(orient='records')
     total_cash = float(cash_used['amount'].sum())
 
+    # ---------------- TOTAL SALES (ALL METHODS) ----------------
+    total_sales_amount = execute_query(
+        """
+        SELECT COALESCE(SUM(amount), 0)
+        FROM sales
+        WHERE sale_date BETWEEN %s AND %s
+        """,
+        [start_date, deposit_date],
+        fetchone=True
+    )[0]
+    total_sales_amount = float(total_sales_amount or 0)
+
     # ---------------- DIFFERENCE ----------------
-
     diff = deposito_amount - total_cash
-
-    if diff < 0:
-        diff_class = "diff-negative"
-    elif diff > 0:
-        diff_class = "diff-positive"
-    else:
-        diff_class = ""
+    diff_class = "diff-positive" if diff > 0 else "diff-negative" if diff < 0 else ""
 
     # ---------------- RENDER ----------------
-
     return render_template(
         'deposit_breakdown.html',
         deposit_date=deposit_date,
         deposito_rows=deposito_rows,
         deposito_amount=deposito_amount,
+        total_tsc=total_tsc,
         previous_deposito_date=previous_deposito_date,
         cash_rows=cash_rows,
         total_cash=total_cash,
+        total_sales_amount=total_sales_amount,
         diff=diff,
         diff_class=diff_class,
         start_date=start_date,

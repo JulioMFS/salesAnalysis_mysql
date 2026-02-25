@@ -33,6 +33,11 @@
             margin-top: 10px;
             border-radius: 5px;
         }
+
+        .tsc-positive {
+            color: #0d6efd;  /* highlight TSC > 0 in blue */
+            font-weight: bold;
+        }
     </style>
 </head>
 
@@ -52,12 +57,12 @@
     <div class="card-body">
 
         <p class="mb-2">
-            <strong>Depósito date:</strong> {{ deposit_date }}
+            <strong>Depósito date:</strong> {{ date }}
         </p>
 
         <!-- ================= DEPÓSITOS TABLE ================= -->
 
-        <h6 class="fw-bold">Depósitos on {{ deposit_date }}</h6>
+        <h6 class="fw-bold">Depósitos on {{ date }}</h6>
 
         <table class="table table-sm table-bordered">
             <thead class="table-light">
@@ -65,20 +70,26 @@
                     <th>Date</th>
                     <th>Description</th>
                     <th class="amount">Amount (€)</th>
+                    <th class="amount">TSC (€)</th>
+                    <th class="amount">Credited Sales Date</th>
                 </tr>
             </thead>
             <tbody>
-                {% if deposito_rows %}
-                    {% for d in deposito_rows %}
+                {% if transactions %}
+                    {% for d in transactions %}
                     <tr>
-                        <td>{{ d.transaction_date }}</td>
+                        <td>{{ d.transaction_date.strftime('%Y-%m-%d') }}</td>
                         <td>{{ d.description }}</td>
                         <td class="amount">{{ "{:,.2f}".format(d.amount) }}</td>
+                        <td class="amount {% if d.tsc > 0 %}tsc-positive{% endif %}">
+                            {{ "{:,.2f}".format(d.tsc) }}
+                        </td>
+                        <td class="amount">{{ d.credited_date.strftime('%Y-%m-%d') }}</td>
                     </tr>
                     {% endfor %}
                 {% else %}
                     <tr>
-                        <td colspan="3" class="text-center text-muted">
+                        <td colspan="5" class="text-center text-muted">
                             No depósitos found
                         </td>
                     </tr>
@@ -87,103 +98,30 @@
             <tfoot class="table-light fw-bold">
                 <tr>
                     <td colspan="2">Total Depósito</td>
-                    <td class="amount">
-                        {{ "{:,.2f}".format(deposito_amount) }}
-                    </td>
+                    <td class="amount">{{ "{:,.2f}".format(total_credits) }}</td>
+                    <td class="amount">{{ "{:,.2f}".format(total_tsc) }}</td>
+                    <td></td>
                 </tr>
             </tfoot>
         </table>
 
-        <!-- ================= PERIOD INFO ================= -->
-
         <p class="mb-1">
-            <strong>Period considered:</strong>
-            {{ previous_deposito_date if previous_deposito_date else "Start of records" }}
-            → {{ deposit_date }}
-            <small class="text-muted">(deposit day excluded)</small>
+            <strong>Total Sales (all methods):</strong>
+            {{ "{:,.2f}".format(total_sales) }}
         </p>
-
-        <p class="mb-1">
-            <strong>Total Dinheiro considered:</strong>
-            {{ "{:,.2f}".format(total_cash) }}
-        </p>
-
         <p class="mb-1">
             <strong>Difference:</strong>
             <span class="{{ diff_class }}">
-                {{ "{:,.2f}".format(diff) }}
+                {{ "{:,.2f}".format(total_diff) }}
             </span>
         </p>
 
-        {% if diff|abs > 50 %}
+        {% if total_diff|abs > 50 %}
         <div class="warning-box">
             ⚠️ Difference exceeds €50. Please verify deposits or missing cash sales.
         </div>
         {% endif %}
 
-    </div>
-</div>
-
-<!-- ================= CASH TABLE ================= -->
-
-<div class="card mb-3">
-    <div class="card-header">
-        Dinheiro Sales Breakdown
-    </div>
-    <div class="card-body p-0">
-        <table class="table table-sm table-bordered mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>Date</th>
-                    <th class="amount">Dinheiro (€)</th>
-                    <th class="amount">Running Total (€)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% set running_total = 0 %}
-                {% for row in cash_rows %}
-                    {% set running_total = running_total + row.amount %}
-                    <tr>
-                        <td>{{ row.sale_date }}</td>
-                        <td class="amount">
-                            {{ "{:,.2f}".format(row.amount) }}
-                        </td>
-                        <td class="amount
-                            {% if running_total > deposito_amount %}
-                                diff-negative running-over
-                            {% elif running_total < deposito_amount %}
-                                diff-positive running-under
-                            {% endif %}
-                        ">
-                            {{ "{:,.2f}".format(running_total) }}
-                        </td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-            <tfoot class="table-light fw-bold">
-                <tr>
-                    <td>Total Dinheiro</td>
-                    <td></td>
-                    <td class="amount">
-                        {{ "{:,.2f}".format(total_cash) }}
-                    </td>
-                </tr>
-                <tr>
-                    <td>Depósito</td>
-                    <td></td>
-                    <td class="amount">
-                        {{ "{:,.2f}".format(deposito_amount) }}
-                    </td>
-                </tr>
-                <tr>
-                    <td>Difference</td>
-                    <td></td>
-                    <td class="amount {{ diff_class }}">
-                        {{ "{:,.2f}".format(diff) }}
-                    </td>
-                </tr>
-            </tfoot>
-        </table>
     </div>
 </div>
 

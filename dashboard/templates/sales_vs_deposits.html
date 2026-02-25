@@ -15,9 +15,23 @@
         .bg-warning { background-color: #ffe066 !important; }
 
         /* Solid divider between Cartões and Dinheiro */
-        .table td:nth-child(6),
-        .table th:nth-child(6) {
+        .table td:nth-child(7),
+        .table th:nth-child(7) {
             border-right: 4px double #000;
+        }
+        /* Cartões table: fit columns to content */
+        .table {
+            table-layout: auto;
+        }
+
+        .table th,
+        .table td {
+            white-space: nowrap;
+            width: 1%;
+        }
+        .table th {
+            line-height: 1.1;
+            vertical-align: middle;
         }
         thead tr:first-child th:first-child {
         border-right: 4px double #000 !important;
@@ -81,18 +95,18 @@
         <table class="table table-bordered table-sm mb-0">
             <thead class="table-light text-center">
                 <tr>
-                    <th colspan="6" class="bg-secondary text-white">Cartões</th>
-                    <th colspan="5" class="bg-secondary text-white">Dinheiro</th>
+                    <th colspan="7" class="bg-secondary text-white">Cartões</th>
+                    <th colspan="4" class="bg-secondary text-white">Dinheiro</th>
                 </tr>
                 <tr>
                     <th>Data</th>
                     <th>Dia</th>
-                    <th class="text-end">Cartões</th>
-                    <th class="text-end">POS Vendas</th>
+                    <th class="text-end">Vendas<br>Cartões</th>
+                    <th class="text-end">POS<br>Vendas</th>
                     <th class="text-end">Diferença</th>
+                    <th class="text-end">TSC</th>
                     <th class="text-end">Saldo</th>
 
-                    <th>Dia</th>
                     <th class="text-end">Dinheiro</th>
                     <th class="text-end">Depósito</th>
                     <th class="text-end">Diferença</th>
@@ -126,12 +140,15 @@
                         {{ "{:,.2f}".format(row.diff_card) }}
                     </td>
 
+                    <td class="text-end">
+                        {{ "{:,.2f}".format(row.tsc or 0) }}
+                    </td>
+
                     <td class="text-end fw-bold">
-                        {{ "{:,.2f}".format(row.card_balance) }}
+                        {{ "{:,.2f}".format(row.card_balance + (row.tsc or 0)) }}
                     </td>
 
                     <!-- DINHEIRO -->
-                    <td style="text-align:right;">{{ row.day_name }}</td>
                     <td class="text-end bg-warning">
                         {{ "{:,.2f}".format(row.sales_cash) }}
                     </td>

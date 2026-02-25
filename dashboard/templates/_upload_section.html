@@ -7,10 +7,13 @@
                 <strong>Upload Bank CSVs</strong>
             </div>
         </div>
-        <input type="file" id="bankUpload" multiple accept=".csv" style="display:none">
+        <input type="file" id="bankUpload" multiple
+               accept=".csv"
+               style="display:none">
         <small class="text-muted mt-1 upload-hint text-center">
             Only files named <strong>CGD_Conta_Extracto*.csv</strong>
         </small>
+        <div id="bankUploadErrors" class="text-danger small mt-1 text-center"></div>
     </div>
 
     <!-- Sales Upload -->
@@ -24,6 +27,7 @@
         <small class="text-muted mt-1 upload-hint text-center">
             Only files named <strong>Vendas*.pdf</strong>
         </small>
+        <div id="salesUploadErrors" class="text-danger small mt-1 text-center"></div>
     </div>
 
     <!-- TPA Upload -->
@@ -37,10 +41,8 @@
         <small class="text-muted mt-1 upload-hint text-center">
             Files: <strong>Consultar movimentos de TPA*.csv</strong>
         </small>
+        <div id="tpaUploadErrors" class="text-danger small mt-1 text-center"></div>
     </div>
-
-</div>
-
 
 </div>
 
@@ -83,4 +85,3 @@
     </div>
   </div>
 </div>
-
