@@ -682,8 +682,10 @@ def bank_details():
         fetch=True
     )
 
+    # Handle empty results safely
     if tpa_rows:
         tpa_df = pd.DataFrame(tpa_rows)
+        # Rename 'data' to 'transaction_date'
         if 'data' in tpa_df.columns:
             tpa_df = tpa_df.rename(columns={'data': 'transaction_date'})
         tpa_df['transaction_date'] = pd.to_datetime(tpa_df['transaction_date'])
@@ -692,33 +694,16 @@ def bank_details():
     else:
         tpa_df = pd.DataFrame(columns=['transaction_date', 'montante_liquido', 'tsc', 'transaction_date_only'])
 
-    # ---------------- VECTORIZE TSC ASSIGNMENT ----------------
-    if not tpa_df.empty and not filtered_df.empty:
-        # Merge POS and TPA on date
-        merged = filtered_df.merge(
-            tpa_df[['transaction_date_only', 'montante_liquido', 'tsc']],
-            on='transaction_date_only',
-            how='left',
-            suffixes=('', '_tpa')
-        )
+    # ---------------- MATCH TSC PER LINE (closest amount per date) ----------------
+    filtered_df['tsc'] = 0.0
 
-        # Compute absolute difference
-        merged['abs_diff'] = (merged['amount'] - merged['montante_liquido']).abs()
-
-        # Sort by date + abs_diff
-        merged = merged.sort_values(['transaction_date_only', 'abs_diff'])
-
-        # Keep only the closest TPA per POS transaction
-        merged = merged.drop_duplicates(subset=['transaction_date', 'amount'], keep='first')
-
-        # Assign TSC back
-        filtered_df = filtered_df.merge(
-            merged[['transaction_date', 'amount', 'tsc']],
-            on=['transaction_date', 'amount'],
-            how='left'
-        )
-
-    filtered_df['tsc'] = filtered_df['tsc'].fillna(0.0)
+    for date, group in filtered_df.groupby('transaction_date_only'):
+        tpa_candidates = tpa_df[tpa_df['transaction_date_only'] == date]
+        if not tpa_candidates.empty:
+            for idx, row in group.iterrows():
+                # Find TPA row with closest montante_liquido to bank amount
+                closest_idx = (tpa_candidates['montante_liquido'] - row['amount']).abs().idxmin()
+                filtered_df.at[idx, 'tsc'] = tpa_candidates.at[closest_idx, 'tsc']
 
     # ---------------- CALCULATE TOTALS ----------------
     transactions = filtered_df.to_dict(orient='records')
