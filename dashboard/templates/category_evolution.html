@@ -5,187 +5,210 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Expense Category Evolution</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/style.css">
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 
 <style>
-    /* Inputs, dropdowns, multi-select */
-    #date_range,
-    #view,
-    #categories {
-        font-size: 0.7rem;
-    }
+/* Form & card spacing */
+.card { padding: 0.8rem; }
+.row.g-2 > * { margin-bottom: 0.3rem; }
 
-    /* Labels and buttons */
-    .form-label { font-size: 0.65rem; }
-    .btn { font-size: 0.65rem; padding: 0.25rem 0.5rem; }
+/* From / To date inputs */
+#start_date, #end_date { font-size:0.75rem; }
 
-    /* Flatpickr calendar */
-    .flatpickr-calendar { font-size: 0.7rem; }
-    .flatpickr-day { line-height: 1.2; font-size: 0.7rem; }
-    .flatpickr-monthDropdown-months,
-    .flatpickr-current-month span.cur-month,
-    .flatpickr-weekday { font-size: 0.7rem; }
+/* Categories dropdown */
+#categories { font-size:0.65rem; }
 
-    /* Card & spacing */
-    .card { padding: 0.8rem; }
-    .row.g-2 > * { margin-bottom: 0.3rem; }
+/* Select2 compact styling */
+.select2-container--default .select2-selection--multiple {
+    font-size: 0.65rem;
+    min-height: 1.8rem;
+    padding: 0.2rem 0.3rem;
+}
+
+.select2-container--default .select2-selection--multiple .select2-selection__choice {
+    font-size: 0.65rem;
+    margin: 0.1rem 0.15rem;
+    padding: 0 0.2rem;
+    line-height: 1.3;
+}
+
+.select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+    font-size: 0.6rem;
+    margin-right: 0.1rem;
+}
+
+.select2-container--default .select2-results__option {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.5rem;
+    line-height: 1.1;
+}
+
+/* Select2 search input */
+.select2-container--default .select2-search--inline .select2-search__field,
+.select2-container--default .select2-search--dropdown .select2-search__field {
+    font-size: 0.65rem;
+    height: 1.5rem;
+    padding: 0 0.2rem;
+    margin-top: 0.1rem;
+}
 </style>
-
-
 </head>
 <body>
-
 <div class="container my-3">
 
-    <div class="d-flex align-items-center mb-3">
-        <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary me-2">← Back</a>
-        <h3 class="mb-0 flex-grow-1 text-center">Expense Category Evolution</h3>
-        <a href="/" class="btn btn-sm btn-dark ms-2">🏠 Dashboard</a>
-    </div>
+  <div class="d-flex align-items-center mb-3">
+      <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary me-2">← Back</a>
+      <h3 class="mb-0 flex-grow-1 text-center">Expense Category Evolution</h3>
+      <a href="/" class="btn btn-sm btn-dark ms-2">🏠 Dashboard</a>
+  </div>
 
-    <div class="card shadow-sm">
-        <form id="evolutionForm" class="mb-3">
+  <div class="card shadow-sm">
+    <form id="evolutionForm" class="mb-3">
 
-            <div class="row g-2 mb-2">
-                <!-- Start Date -->
-               <div class="col-md-3 col-sm-6">
-                    <label for="date_range" class="form-label">Date range</label>
-                    <!-- visible input for range -->
-                    <input
-                        type="text"
-                        id="date_range"
-                        class="form-control form-control-sm"
-                        placeholder="Select period"
-                        required
-                    >
-                    <!-- hidden fields sent to backend -->
-                    <input type="hidden" id="start_date" name="start_date">
-                    <input type="hidden" id="end_date" name="end_date">
-               </div>
+      <div class="row g-2 mb-2">
+        <!-- From / To Dates -->
+        <div class="col-md-3 col-sm-6">
+            <label for="start_date" class="form-label">From</label>
+            <input type="date" id="start_date" name="start_date" class="form-control form-control-sm" required>
 
-                <!-- View -->
-                <div class="col-md-3 col-sm-6">
-                    <label for="view" class="form-label">View</label>
-                    <select name="view" id="view" class="form-select form-select-sm">
-                        <option value="monthly">Monthly</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="daily">Daily</option>
-                    </select>
-                </div>
+            <label for="end_date" class="form-label mt-1">To</label>
+            <input type="date" id="end_date" name="end_date" class="form-control form-control-sm" required>
+        </div>
 
-                <!-- Categories -->
-                <div class="col-md-3 col-sm-6">
-                    <label for="categories" class="form-label">Categories</label>
-                    <select name="categories[]" id="categories" multiple size="3" class="form-select form-select-sm">
-                        {% for c in categories %}
-                        <option value="{{ c }}">{{ c }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
+        <!-- View -->
+        <div class="col-md-3 col-sm-6">
+            <label for="view" class="form-label">Period</label>
+            <select id="view" name="view" class="form-select form-select-sm">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly" selected>Monthly</option>
+            </select>
+        </div>
+        <!-- Categories -->
+        <div class="col-md-3 col-sm-6">
+            <label for="categories" class="form-label">Categories</label>
+            <select name="categories[]" id="categories" multiple class="form-select form-select-sm">
+                {% for c in categories %}
+                <option value="{{ c }}">{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+      </div>
 
-            <!-- Presets -->
-            <div class="mb-2">
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-outline-secondary btn-sm" data-preset="7d">Last 7 days</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" data-preset="last_month">Last month</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" data-preset="ytd">YTD</button>
-                </div>
-            </div>
+      <!-- Actions -->
+      <div class="mb-2">
+          <button type="submit" class="btn btn-primary btn-sm me-1">Analyze</button>
+          <button type="button" id="toggleBarMode" class="btn btn-secondary btn-sm">Stacked view</button>
+      </div>
+    </form>
 
-            <!-- Actions -->
-            <div class="mb-2">
-                <button type="submit" class="btn btn-primary btn-sm me-1">Analyze</button>
-                <button id="toggleBarMode" class="btn btn-secondary btn-sm" type="button">Stacked view</button>
-            </div>
-
-        </form>
-
-        <div id="chart"></div>
-    </div>
+    <div id="chart" style="height:400px;"></div>
+    <div id="drilldownContainer" class="mt-4"></div>
+  </div>
 </div>
 
+<!-- Scripts -->
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<script src="{{ url_for('static', filename='js/category_evolution.js') }}" nonce="{{ csp_nonce }}"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/index.js"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-    const rangeInput = document.getElementById("date_range");
+$(document).ready(function() {
+    // Initialize Select2
+    $('#categories').select2({
+        placeholder: "Select categories",
+        width: '100%',
+        closeOnSelect: false
+    });
+
+    // -----------------------------
+    // Persistent state
+    // -----------------------------
+    const STORAGE_KEY = "categoryEvolutionState";
+    const form = document.getElementById("evolutionForm");
     const startInput = document.getElementById("start_date");
     const endInput = document.getElementById("end_date");
+    const categoriesSelect = $('#categories');
+    const toggleBtn = document.getElementById("toggleBarMode");
+    const chartDiv = document.getElementById("chart");
+
+    let currentBarMode = "stack";
+    let lastTraces = null;
+
     const viewSelect = document.getElementById("view");
 
-    const toISO = d => d.toISOString().split("T")[0];
+  // Save state
+  function saveState() {
+      const state = {
+          start_date: startInput.value,
+          end_date: endInput.value,
+          categories: categoriesSelect.val() || [],
+          period: viewSelect.value,
+          barMode: currentBarMode
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
 
-    let fp; // flatpickr instance
+  // Load state
+  function loadState() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return;
+      const state = JSON.parse(raw);
+      if(state.start_date) startInput.value = state.start_date;
+      if(state.end_date) endInput.value = state.end_date;
+      if(state.categories) categoriesSelect.val(state.categories).trigger('change');
+      if(state.period) viewSelect.value = state.period;
+      if(state.barMode){
+          currentBarMode = state.barMode;
+          toggleBtn.textContent = currentBarMode === "stack" ? "Grouped view" : "Stacked view";
+      }
+      if(state.start_date && state.end_date && state.categories?.length) submitForm();
+  }
 
-    function initPicker() {
-        if (fp) fp.destroy(); // destroy previous picker
+// Listen for changes
+viewSelect.addEventListener("change", saveState);
+    startInput.addEventListener("change", saveState);
+    endInput.addEventListener("change", saveState);
+    categoriesSelect.on("change", saveState);
 
-        if (viewSelect.value === "monthly") {
-            fp = flatpickr(rangeInput, {
-                plugins: [new monthSelectPlugin({
-                    shorthand: true,
-                    dateFormat: "Y-m",
-                    altFormat: "F Y",
-                })],
-                mode: "range",
-                onChange: (dates) => {
-                    if (dates.length === 2) {
-                        const start = new Date(dates[0].getFullYear(), dates[0].getMonth(), 1);
-                        const end = new Date(dates[1].getFullYear(), dates[1].getMonth() + 1, 0);
-                        startInput.value = toISO(start);
-                        endInput.value = toISO(end);
-                    }
-                },
-            });
-        } else if (viewSelect.value === "weekly") {
-            fp = flatpickr(rangeInput, {
-                mode: "range",
-                dateFormat: "Y-m-d",
-                onChange: (dates) => {
-                    if (dates.length === 2) {
-                        const start = startOfWeek(dates[0]);
-                        const end = endOfWeek(dates[1]);
-                        startInput.value = toISO(start);
-                        endInput.value = toISO(end);
-                    }
-                },
-            });
-        } else {
-            fp = flatpickr(rangeInput, {
-                mode: "range",
-                dateFormat: "Y-m-d",
-                onChange: (dates) => {
-                    if (dates.length === 2) {
-                        startInput.value = toISO(dates[0]);
-                        endInput.value = toISO(dates[1]);
-                    }
-                },
-            });
+    toggleBtn.addEventListener("click", () => {
+        if(!lastTraces) return;
+        currentBarMode = currentBarMode==="stack"?"group":"stack";
+        toggleBtn.textContent = currentBarMode==="stack"?"Grouped view":"Stacked view";
+        Plotly.relayout(chartDiv,{barmode:currentBarMode});
+        saveState();
+    });
+
+    // -----------------------------
+    // Form submit
+    // -----------------------------
+    async function submitForm() {
+        saveState();
+        try {
+            const res = await fetch("/category_evolution_data", {method:"POST", body:new FormData(form)});
+            const text = await res.text();
+            let data;
+            try { data = JSON.parse(text); }
+            catch(e) { console.error("Server returned invalid JSON:", text); return; }
+
+            if(!data.series?.length) return alert("No data available");
+
+            lastTraces = data.series.map(s => ({x:s.x, y:s.y, name:s.name, type:"bar"}));
+            Plotly.newPlot(chartDiv, lastTraces, {barmode:currentBarMode, margin:{t:40,b:80,l:50,r:20}});
+
+        } catch(err){
+            console.error(err);
+            alert("Error loading chart data");
         }
     }
 
-    function startOfWeek(date) {
-        const d = new Date(date);
-        const day = d.getDay() || 7;
-        d.setDate(d.getDate() - day + 1);
-        return d;
-    }
+    form.addEventListener("submit", e => { e.preventDefault(); submitForm(); });
 
-    function endOfWeek(date) {
-        const d = startOfWeek(date);
-        d.setDate(d.getDate() + 6);
-        return d;
-    }
-
-    viewSelect.addEventListener("change", initPicker);
-    initPicker();
+    // -----------------------------
+    // Initialize state on page load
+    // -----------------------------
+    loadState();
 });
 </script>
-
 </body>
 </html>

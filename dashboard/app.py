@@ -1019,69 +1019,73 @@ def category_evolution():
 
 @app.route('/category_evolution_data', methods=['POST'])
 def category_evolution_data():
-    data = request.form
+    try:
+        data = request.form
 
-    start_date_str = data.get("start_date")
-    end_date_str = data.get("end_date")
+        start_date_str = data.get("start_date")
+        end_date_str = data.get("end_date")
 
-    if not start_date_str or not end_date_str:
-        return jsonify({"series": []})
+        if not start_date_str or not end_date_str:
+            return jsonify({"series": []})
 
-    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
 
-    view = data.get('view', 'monthly')
-    categories = data.getlist('categories[]')
+        view = data.get('view', 'monthly')
+        categories = data.getlist('categories[]')
 
-    if not categories:
-        return jsonify({"series": []})
+        if not categories:
+            return jsonify({"series": []})
 
-    # --- Time grouping ---
-    if view == "monthly":
-        period_sql = "DATE_FORMAT(t.transaction_date, '%Y-%m-01')"
-    elif view == "weekly":
-        period_sql = "DATE_SUB(DATE(t.transaction_date), INTERVAL WEEKDAY(t.transaction_date) DAY)"
-    else:
-        period_sql = "DATE(t.transaction_date)"
+        if view == "monthly":
+            period_sql = "DATE_FORMAT(t.transaction_date, '%Y-%m-01')"
+        elif view == "weekly":
+            period_sql = "DATE_SUB(DATE(t.transaction_date), INTERVAL WEEKDAY(t.transaction_date) DAY)"
+        else:
+            period_sql = "DATE(t.transaction_date)"
 
-    placeholders = ",".join(["%s"] * len(categories))
+        placeholders = ",".join(["%s"] * len(categories))
 
-    rows = execute_query(
-        f"""
-        SELECT
-            {period_sql} AS period,
-            c.category,
-            SUM(ABS(t.amount)) AS total
-        FROM bank_transactions t
-        JOIN debit_classifications c
-          ON t.description LIKE CONCAT('%', c.description_pattern, '%')
-        WHERE t.transaction_type = 'debit'
-          AND c.category IN ({placeholders})
-          AND DATE(t.transaction_date) BETWEEN %s AND %s
-        GROUP BY period, c.category
-        ORDER BY period
-        """,
-        categories + [start_date, end_date],
-        fetch=True
-    )
+        rows = execute_query(
+            f"""
+            SELECT
+                {period_sql} AS period,
+                c.category,
+                SUM(ABS(t.amount)) AS total
+            FROM bank_transactions t
+            JOIN debit_classifications c
+              ON t.description LIKE CONCAT('%', c.description_pattern, '%')
+            WHERE t.transaction_type = 'debit'
+              AND c.category IN ({placeholders})
+              AND DATE(t.transaction_date) BETWEEN %s AND %s
+            GROUP BY period, c.category
+            ORDER BY period
+            """,
+            categories + [start_date, end_date],
+            fetch=True
+        )
 
-    df = pd.DataFrame(rows)
-    if df.empty:
-        return jsonify({"series": []})
+        df = pd.DataFrame(rows, columns=["period","category","total"])
 
-    df['period'] = pd.to_datetime(df['period'])
+        if df.empty:
+            return jsonify({"series": []})
 
-    # --- Build Plotly series ---
-    series = []
-    for cat in categories:
-        d = df[df.category == cat]
-        series.append({
-            "name": cat,
-            "x": d['period'].dt.strftime('%Y-%m-%d').tolist(),
-            "y": d['total'].tolist()
-        })
+        df['period'] = pd.to_datetime(df['period'])
 
-    return jsonify({"series": series})
+        series = []
+        for cat in categories:
+            d = df[df.category == cat]
+            series.append({
+                "name": cat,
+                "x": d['period'].dt.strftime('%Y-%m-%d').tolist(),
+                "y": d['total'].tolist()
+            })
+
+        return jsonify({"series": series})
+
+    except Exception as e:
+        print("CATEGORY EVOLUTION ERROR:", e)
+        return jsonify({"series": [], "error": str(e)})
 
 # ----- Add new -----
 
